@@ -20,6 +20,7 @@
 import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import time
@@ -100,6 +101,10 @@ def precheck() -> bool:
                     bool(passed) and "30/30 PASS" in passed[-1], passed[-1][:40] if passed else "")
     else:
         ok &= check("④ 白盒回归（最近一次）", False, "未找到回归日志")
+    # ⑤ junction 守卫（os.walk 不跟随，会导致打包静默缺文件）
+    bad = find_reparse_points(os.path.join(ROOT, "_py312"))
+    ok &= check("⑤ _py312 无 junction", not bad,
+                "; ".join(bad[:3]) if bad else "")
     return ok
 
 
@@ -121,12 +126,68 @@ def copy_tree(src, dst, exclude_dirs=(), exclude_files=()):
                 print("  跳过 %s: %s" % (s, str(e)[:60]), flush=True)
 
 
+def find_reparse_points(root):
+    """找出目录树里的 junction / symlink（os.walk 不跟随，打包会静默丢文件）"""
+    bad = []
+    for dirpath, dirs, files in os.walk(root):
+        for name in list(dirs) + files:
+            p = os.path.join(dirpath, name)
+            try:
+                st = os.lstat(p)
+            except OSError:
+                continue
+            if getattr(st, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+                bad.append(p)
+    return bad
+
+
+def count_files(root):
+    n = 0
+    for _, dirs, files in os.walk(root):
+        dirs[:] = [d for d in dirs if d != "__pycache__"]
+        n += len(files)
+    return n
+
+
+def do_zip(stage):
+    print("[4/4] 压缩 zip（约几分钟）…", flush=True)
+    zpath = os.path.join(OUT, NAME + ".zip")
+    if os.path.exists(zpath):
+        os.remove(zpath)
+    with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
+        for root, dirs, files in os.walk(stage):
+            for f in files:
+                fp = os.path.join(root, f)
+                arc = os.path.relpath(fp, OUT)
+                try:
+                    z.write(fp, arc)
+                except (PermissionError, OSError):
+                    pass
+    mb = os.path.getsize(zpath) / 1024 / 1024
+    print("=" * 60, flush=True)
+    print("RELEASE OK: %s (%.0f MB)" % (zpath, mb), flush=True)
+    print("目录: %s" % stage, flush=True)
+    return 0
+
+
 def main():
+    stage = os.path.join(OUT, NAME)
+    # --zip-only：跳过 precheck 与复制，直接对既有 stage 重新压缩（修复后复用）
+    if "--zip-only" in sys.argv:
+        if not os.path.isdir(stage):
+            print("RELEASE BLOCKED：--zip-only 但找不到 %s" % stage, flush=True)
+            return 1
+        bad = find_reparse_points(stage)
+        if bad:
+            for b in bad:
+                print("FAIL junction: %s" % b, flush=True)
+            print("RELEASE BLOCKED：stage 存在 junction，先实体化再压缩", flush=True)
+            return 1
+        return do_zip(stage)
     if not precheck():
         print("RELEASE BLOCKED：发布前检查未通过", flush=True)
         return 1
     print("=" * 60)
-    stage = os.path.join(OUT, NAME)
     if os.path.exists(stage):
         shutil.rmtree(stage, ignore_errors=True)
     os.makedirs(stage, exist_ok=True)
@@ -151,6 +212,13 @@ def main():
                 p = os.path.join(root, d)
                 if not os.listdir(p):
                     os.rmdir(p)
+    # 复制完整性校验：_py312 文件数必须不小于源（防 junction/权限再坑）
+    src_n = count_files(os.path.join(ROOT, "_py312"))
+    dst_n = count_files(os.path.join(lw_dst, "_py312"))
+    if not check("① _py312 复制完整性", dst_n >= src_n,
+                 "src=%d dst=%d" % (src_n, dst_n)):
+        print("RELEASE BLOCKED：_py312 复制不完整", flush=True)
+        return 1
     # config 保留默认；skills/knowledge_base 随 copy_tree 已带
 
     # 2) 数字银行（纯代码 + 页面 + 启动器）
@@ -221,24 +289,7 @@ def main():
                 + "\n".join(core_pkgs) + "\n")
 
     # 4) zip
-    print("[4/4] 压缩 zip（约几分钟）…", flush=True)
-    zpath = os.path.join(OUT, NAME + ".zip")
-    if os.path.exists(zpath):
-        os.remove(zpath)
-    with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
-        for root, dirs, files in os.walk(stage):
-            for f in files:
-                fp = os.path.join(root, f)
-                arc = os.path.relpath(fp, OUT)
-                try:
-                    z.write(fp, arc)
-                except (PermissionError, OSError):
-                    pass
-    mb = os.path.getsize(zpath) / 1024 / 1024
-    print("=" * 60, flush=True)
-    print("RELEASE OK: %s (%.0f MB)" % (zpath, mb), flush=True)
-    print("目录: %s" % stage, flush=True)
-    return 0
+    return do_zip(stage)
 
 
 if __name__ == "__main__":
