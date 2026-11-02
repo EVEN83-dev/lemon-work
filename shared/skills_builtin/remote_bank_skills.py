@@ -60,9 +60,14 @@ def _call(method: str, path: str, body: dict | None = None) -> SkillResult:
             detail = resp.text[:120]
         return SkillResult(success=False, error=f"数字银行 HTTP {resp.status_code}: {detail}")
     data = resp.json()
-    return SkillResult(success=bool(data.get("success", True)),
-                       output=str(data.get("message") or data.get("error") or "已完成"),
-                       data=data)
+    ok = bool(data.get("success", True))
+    msg = str(data.get("message") or data.get("error")
+               or ("已完成" if ok else "银行未返回失败原因"))
+    # ★v358: error 必须落到 SkillResult.error —— 此前只写 output，
+    #   Agent 收到 success=False 且 error 为空 → 界面显示「ERROR: 错误: 」，
+    #   无法诊断（自转/风控拦截等具体原因全丢），真机 S1 转账死循环 20 轮根因。
+    return SkillResult(success=ok, output=msg, data=data,
+                       error="" if ok else msg)
 
 
 def _yuan_to_fen(x) -> int:

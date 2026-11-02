@@ -46,7 +46,7 @@ STATE = {"idx": 0, "t0": 0.0}
 # 与合规测试同源的六场景指令（含"切到 xx 页"验证页面跟随联动）
 TASKS = [
     ("S1 智能转账",
-     "用数字银行查一下陈奕汐的收款账号，并从主账户给她转 66 元，备注比赛测试；"
+     "用数字银行查一下李雷的收款账号，并从主账户 ACC001 给他转 66 元，备注比赛测试；"
      "如果支持定时转账，再预约明天给 ACC003 转 200 元。办完把界面切到转账页。"),
     ("S2 账单分析",
      "分析我的账单消费情况：统计消费分类，并识别有没有异常交易，"
@@ -142,6 +142,15 @@ def main() -> int:
                 d = {}
             if d.get("final") and int(d.get("final_len") or 0) > 30:
                 label = STATE.get("label", "?")
+                # 自动留证：窗口截图存到 D:\YH-lemon\素材\（供技术文档/答辩使用）
+                try:
+                    shot_dir = os.path.join(os.path.dirname(ROOT), "素材")
+                    os.makedirs(shot_dir, exist_ok=True)
+                    fn = os.path.join(shot_dir, "auto_S%d.png" % (STATE["idx"] + 1))
+                    self.grab().save(fn)
+                    log("已保存截图: " + fn)
+                except Exception as e:
+                    log("截图失败: %s" % str(e)[:50])
                 log("场景完成【%s】耗时 %ds —— 停留 12 秒供截图/录屏"
                     % (label, int(time.time() - STATE["t0"])))
                 STATE["idx"] += 1
