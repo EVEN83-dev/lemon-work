@@ -1,0 +1,32 @@
+# -*- coding: utf-8 -*-
+# Lemon Work · 源码仓库 .gitignore
+# 便携运行时 / 构建产物 / 运行时数据不入库（发布 zip 另行挂 GitHub Release）
+
+# 便携 Python 运行时（1.2GB，README 提供 下载/自建 说明）
+_py312/
+
+# 构建与产物
+bin/
+dist/
+build/
+release/
+*.spec.bak
+
+# 运行时数据（轨迹/崩溃/日志/会话）
+data/agent_trajectories/
+data/perf/
+data/hybrid_*
+*.log
+*.log.*
+crash_*.log
+
+# 本机缓存
+__pycache__/
+*.pyc
+.lemon/
+.idea/
+.vscode/
+
+# 本机敏感配置（Key 等由用户在应用内填写）
+config/local_*.json
+config/*secret*

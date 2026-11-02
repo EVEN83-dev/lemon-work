@@ -1,0 +1,10 @@
+{
+  "general": {
+    "language": "zh_CN"
+  },
+  "housekeeping": {
+    "checkpoint_keep": 50,
+    "state_keep": 20,
+    "session_days": 30
+  }
+}

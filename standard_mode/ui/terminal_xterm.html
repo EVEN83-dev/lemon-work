@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lemon Code Terminal</title>
+<link rel="stylesheet" href="vendor/xterm.css">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: #080808;
+  }
+  #terminal-container { width: 100%; height: 100%; padding: 0; }
+  .xterm { height: 100%; }
+  #boot-status {
+    position: fixed; top: 8px; left: 12px;
+    color: #6e7681; font-family: monospace; font-size: 11px;
+    z-index: 10; pointer-events: none;
+  }
+  #term-size {
+    position: fixed; top: 8px; right: 12px;
+    color: #6e7681; font-family: monospace; font-size: 11px;
+    z-index: 10; pointer-events: none;
+    background: rgba(8,8,8,0.7); padding: 2px 8px; border-radius: 3px;
+  }
+</style>
+</head>
+<body>
+<div id="terminal-container"></div>
+<div id="boot-status">[Lemon Terminal] 初始化中…</div>
+<div id="term-size">cols:-- rows:--</div>
+
+<script src="vendor/xterm.js"></script>
+<script src="vendor/xterm-addon-web-links.js"></script>
+<script src="vendor/xterm-addon-serialize.js"></script>
+<script src="vendor/xterm-addon-webgl.js"></script>
+
+<script>
+(function() {
+  var bootEl = document.getElementById('boot-status');
+  function boot(text, color) {
+    if (!bootEl) return;
+    bootEl.textContent = text;
+    if (color) bootEl.style.color = color;
+  }
+
+  // ★ 391A: 配置源优先级 — URL 查询参数 > window.__TERMINAL__ > 等待注入
+  // SimpleTerminalPanel 通过 http://127.0.0.1:PORT/terminal_xterm.html?ws=PORT&token=TOKEN
+  // 传入 wsPort，无需 runJavaScript 注入。
+  function _readConfig() {
+    var cfg = window.__TERMINAL__ || {};
+    var qs = window.location.search.substring(1).split('&');
+    for (var i = 0; i < qs.length; i++) {
+      var kv = qs[i].split('=');
+      if (!kv[0]) continue;
+      var k = decodeURIComponent(kv[0]);
+      var v = kv.length > 1 ? decodeURIComponent(kv.slice(1).join('=')) : '';
+      if (k === 'ws') v = parseInt(v, 10) || cfg.wsPort;
+      if (k === 'token') cfg.authToken = v;
+      if (k === 'cols') v = parseInt(v, 10) || cfg.cols;
+      if (k === 'rows') v = parseInt(v, 10) || cfg.rows;
+      if (k === 'sid') cfg.sid = v;
+      cfg[k] = v;
+    }
+    // 兼容: URL 用 ?ws=PORT 但前端代码读 cfg.wsPort
+    if (!cfg.wsPort && cfg.ws) cfg.wsPort = cfg.ws;
+    window.__TERMINAL__ = cfg;
+    return cfg;
+  }
+  _readConfig();
+
+  // ★ 405A1: 序列化缓冲区 → 发给后端落盘
+  // ★第362章修复: _sid 曾是函数局部 var → requestRestore 引用全局时报
+  //   "ReferenceError: _sid is not defined"；提升到 window 供全页使用。
+  window.__TERM_SID__ = (window.__TERMINAL__ && window.__TERMINAL__.sid) || "";
+  var _serializeFailCount = 0;  // serialize addon 与 xterm 实例 API 不匹配时熔断防刷屏
+  function doSerialize() {
+    if (!serializeAddon || !ws || ws.readyState !== WebSocket.OPEN || !window.__TERM_SID__) return;
+    if (_serializeFailCount >= 2) return;  // 连续失败 → 停用自动序列化（防每8秒刷屏）
+    try {
+      var data = serializeAddon.serialize({ scrollback: term.options.scrollback });
+      _serializeFailCount = 0;
+      if (data && data.length > 100) {
+        sendCmd({cmd: 'serialize', sid: window.__TERM_SID__, data: data});
+      }
+    } catch (e) {
+      _serializeFailCount++;
+      if (_serializeFailCount <= 2) {
+        console.warn('[Lemon] serialize 失败(连续' + _serializeFailCount + '次，超过将停用自动落盘):', e && e.message);
+      }
+      if (_serializeFailCount >= 2 && _serializeTimer) {
+        clearInterval(_serializeTimer); _serializeTimer = null;
+      }
+    }
+  }
+
+  // ★ 405A1: 应用可见性变化时主动序列化（Tab 切换 / 最小化 / 关闭前）
+  var _serializeTimer = null;
+  function startAutoSerialize() {
+    if (_serializeTimer) clearInterval(_serializeTimer);
+    _serializeTimer = setInterval(doSerialize, 8000);  // 每 8 秒落盘
+  }
+  function stopAutoSerialize() {
+    if (_serializeTimer) { clearInterval(_serializeTimer); _serializeTimer = null; }
+  }
+
+  var term;
+  try {
+    term = new Terminal({
+      cursorBlink: true,
+      cursorStyle: 'bar',
+      fontSize: 13,
+      fontFamily: '"JetBrains Mono", "Cascadia Code", "Consolas", "Cascadia Mono", monospace',
+      theme: {
+        background: '#080808',
+        foreground: '#c9d1d9',
+        cursor:     '#ff6b35',
+        selectionBackground: '#ff6b3544',
+        black:      '#161b22', red:        '#e05561', green:      '#8cc265',
+        yellow:     '#d18f52', blue:       '#4aa5f0', magenta:    '#c162de',
+        cyan:       '#42b3c2', white:      '#d4d4d4',
+        brightBlack:  '#6e7681', brightRed:    '#ff6b6b', brightGreen:  '#98e06a',
+        brightYellow: '#ffb86c', brightBlue:   '#74b9ff', brightMagenta:'#e17bff',
+        brightCyan:   '#6ef0ff', brightWhite:  '#ffffff',
+      },
+      scrollback: 5000,
+      allowTransparency: true,
+      windowsMode: true,
+    });
+  } catch (e) {
+    boot('[Lemon Terminal] xterm.js 加载失败: ' + e.message, '#e05561');
+    return;
+  }
+  boot('[Lemon Terminal] xterm.js 已加载，正在打开终端…', '#6e7681');
+
+  var webLinksAddon = new WebLinksAddon.WebLinksAddon();
+  term.loadAddon(webLinksAddon);
+
+  // ★ 405A1: SerializeAddon — 导出 ANSI 完整缓冲区用于回滚持久化
+  var serializeAddon = null;
+  try {
+    if (typeof SerializeAddon !== 'undefined' && SerializeAddon.SerializeAddon) {
+      serializeAddon = new SerializeAddon.SerializeAddon();
+      term.loadAddon(serializeAddon);
+    }
+  } catch (e) {
+    console.warn('[Lemon] SerializeAddon 加载失败:', e);
+  }
+
+  // ★ 405A3: WebGL GPU 渲染 ─ 探测 + auto降级 + vendor加载
+  var webglOk = false;
+  (function probeGL() {
+    try {
+      var c = document.createElement('canvas');
+      var gl = c.getContext('webgl2') || c.getContext('webgl');
+      webglOk = !!gl;
+    } catch (e) { webglOk = false; }
+  })();
+
+  var webglAddon = null;
+  if (webglOk && typeof WebglAddon !== 'undefined' && WebglAddon.WebglAddon) {
+    try {
+      webglAddon = new WebglAddon.WebglAddon();
+      webglAddon.onContextLoss(function() {
+        try { webglAddon.dispose(); } catch (e) {}
+        webglAddon = null;
+        console.warn('[Lemon] WebGL 已丢失，降级 canvas');
+      });
+      term.loadAddon(webglAddon);
+      console.log('[Lemon] WebGL GPU 渲染器已加载 (WebGL2/Canvas)');
+    } catch (e) {
+      webglAddon = null;
+      console.warn('[Lemon] WebGL addon 加载失败，回退 canvas:', e);
+    }
+  }
+  if (!webglAddon) {
+    console.log('[Lemon] 使用默认 Canvas 渲染 (WebGL 不可用)');
+  }
+
+  // ★ 405A4: alt-buffer 跟踪 + resize 自动强刷 + 鼠标探针
+  var _inAltBuffer = false;
+  var _mouseEvents = [];   // 捕获的鼠标转义序列
+  var _mouseProbeDone = false;
+
+  // ★ 405A4: 用 registerCsiHandler 跟踪 DECSET 1049h / 1049l (alt-buffer 切换)
+  try {
+    if (term.parser && term.parser.registerCsiHandler) {
+      term.parser.registerCsiHandler({prefix: '?', final: 'h'}, function(params) {
+        if (params.length && params[0] === 1049) _inAltBuffer = true;
+        console.log('[Lemon] alt-buffer 进入, _inAltBuffer=' + _inAltBuffer);
+        return false;  // return false 让 xterm 继续默认行为而不拦截
+      });
+      term.parser.registerCsiHandler({prefix: '?', final: 'l'}, function(params) {
+        if (params.length && params[0] === 1049) _inAltBuffer = false;
+        console.log('[Lemon] alt-buffer 退出, _inAltBuffer=' + _inAltBuffer);
+        return false;
+      });
+      console.log('[Lemon] alt-buffer CSI handler 已注册 (?1049h/l)');
+    } else {
+      console.warn('[Lemon] registerCsiHandler 不可用，alt-buffer 跟踪跳过');
+    }
+  } catch (e) {
+    console.warn('[Lemon] alt-buffer CSI handler 注册失败:', e);
+  }
+
+  // ★ 405A4: 鼠标探针 — 监听 PTY 回送的鼠标转义序列
+  term.onData(function(data) {
+    if (data.indexOf('\x1b[M') >= 0 || data.indexOf('\x1b[<') >= 0) {
+      _mouseEvents.push({t: Date.now(), d: data.substring(0, 40)});
+      console.log('[Lemon] 鼠标事件捕获: ' + JSON.stringify(data.substring(0, 30)));
+    }
+  });
+
+  // ★ 405A4: 启动后 2s 发送鼠标跟踪 enable 探针
+  setTimeout(function() {
+    if (!_mouseProbeDone && typeof sendCmd === 'function') {
+      _mouseProbeDone = true;
+      try {
+        sendCmd({cmd: 'input', data: '\x1b[?1000h'});
+        console.log('[Lemon] 已发送鼠标探针 \\x1b[?1000h');
+      } catch (e) {}
+    }
+  }, 2000);
+
+  // ★ 405A2: OSC 133 命令块分段 ─ 命令块索引 {id, cmd, exitCode, startRow, endRow}
+  var _blockIndex = [];       // 命令块列表
+  var _currentBlock = null;   // 当前正在录入的块
+  var _blockIdCounter = 0;    // 块 ID 自增计数器
+
+  // ★ 405A2: 获取当前可见行坐标（baseY + cursorY）
+  function _currentRow() {
+    try {
+      return term.buffer.active.baseY + term.buffer.active.cursorY;
+    } catch (e) { return 0; }
+  }
+
+  // ★ 405A2: 关闭当前未完成的块
+  function _closeCurrentBlock(exitCode) {
+    if (!_currentBlock) return;
+    _currentBlock.endRow = _currentRow();
+    if (exitCode !== undefined) _currentBlock.exitCode = exitCode;
+    _blockIndex.push(_currentBlock);
+    console.log('[Lemon] OSC133 块关闭: id=' + _currentBlock.id +
+      ' cmd="' + _currentBlock.cmd + '" exit=' + _currentBlock.exitCode +
+      ' rows=[' + _currentBlock.startRow + ',' + _currentBlock.endRow + ']');
+    _currentBlock = null;
+  }
+
+  // ★ 405A2: 在终端写入 dim 分隔线（fallback 方案）
+  function _writeSeparatorLine() {
+    try {
+      term.write('\x1b[90m' + '─'.repeat(Math.min(term.cols, 60)) + '\x1b[0m\r\n');
+    } catch (e) {}
+  }
+
+  // ★ 405A2: OSC 133 解析回调
+  function _onOsc133(data) {
+    // data 形如: "A" / "B" / "D;NNN" / "D" / "E;cmdline"
+    if (!data) return;
+    var semiIdx = data.indexOf(';');
+    var verb = semiIdx >= 0 ? data.substring(0, semiIdx) : data;
+    var arg = semiIdx >= 0 ? data.substring(semiIdx + 1) : '';
+
+    if (verb === 'A') {
+      // A: 提示符开始（不新建块，但确保上一个块已关闭）
+      _closeCurrentBlock(0);
+    } else if (verb === 'B') {
+      // B: 命令输入开始 → 新块
+      _closeCurrentBlock(0);
+      _blockIdCounter++;
+      // 在块之前写入 dim 分隔线（仅在非首个块时）
+      if (_blockIdCounter > 1) _writeSeparatorLine();
+      _currentBlock = {
+        id: _blockIdCounter,
+        cmd: '',
+        exitCode: null,
+        startRow: _currentRow(),
+        endRow: null,
+      };
+    } else if (verb === 'D') {
+      // D: 命令结束 → exitCode
+      var code = arg ? parseInt(arg, 10) || 0 : 0;
+      _closeCurrentBlock(code);
+    } else if (verb === 'E') {
+      // E: 命令文本
+      if (_currentBlock) {
+        _currentBlock.cmd = arg;
+      }
+    }
+  }
+
+  // ★ 405A2: 注册 OSC 133 handler（xterm 5.x parser API）
+  try {
+    if (term.parser && term.parser.registerOscHandler) {
+      term.parser.registerOscHandler(133, function(data) {
+        _onOsc133(data);
+        return true;
+      });
+      console.log('[Lemon] OSC133 handler 已注册 (registerOscHandler)');
+    } else {
+      console.warn('[Lemon] term.parser.registerOscHandler 不可用，OSC133 解析跳过');
+    }
+  } catch (e) {
+    console.warn('[Lemon] OSC133 handler 注册失败:', e);
+  }
+
+  // ★ 405A2: 块选择交互（点击选择通过 term.selectLines API）
+  window._selectBlock = function(blockId) {
+    var b = null;
+    for (var i = 0; i < _blockIndex.length; i++) {
+      if (_blockIndex[i].id === blockId) { b = _blockIndex[i]; break; }
+    }
+    if (!b || b.startRow == null || b.endRow == null) return;
+    try {
+      term.selectLines(b.startRow, b.endRow);
+      console.log('[Lemon] 选中块 #' + blockId + ' rows=[' + b.startRow + ',' + b.endRow + ']');
+    } catch (e) { console.warn('[Lemon] selectLines 失败:', e); }
+  };
+
+  // ★ 405A2: 导出块索引给后端（可选）
+  function _sendBlockIndex() {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    try {
+      sendCmd({cmd: 'block_index', blocks: _blockIndex});
+    } catch (e) {}
+  }
+
+  // ── 字符像素测量（DOM 测量 + xterm 内部双保险）──
+  var _measureEl = null;
+  function measureCell() {
+    if (!_measureEl) {
+      _measureEl = document.createElement('span');
+      _measureEl.style.cssText = 'position:absolute;visibility:hidden;left:0;top:0;' +
+        'font-family:"JetBrains Mono","Cascadia Code","Consolas",monospace;' +
+        'font-size:13px;line-height:normal;white-space:pre;';
+      document.body.appendChild(_measureEl);
+    }
+    _measureEl.textContent = 'M';
+    var r = _measureEl.getBoundingClientRect();
+    var w = r.width || 0;
+    var h = r.height || 0;
+    // 兜底：用 xterm 内部
+    if (!w || !h) {
+      try {
+        var rs = term && term._core && term._core._renderService;
+        if (rs && rs.dimensions && rs.dimensions.css && rs.dimensions.css.cell) {
+          w = rs.dimensions.css.cell.width || w;
+          h = rs.dimensions.css.cell.height || h;
+        }
+      } catch (e) {}
+    }
+    return {w: w, h: h};
+  }
+
+  // ── safeFit：一次 fit ──
+  function safeFit() {
+    try {
+      if (!term || !term.element) return false;
+      var el = document.getElementById('terminal-container');
+      if (!el) return false;
+      var c = measureCell();
+      if (!c.w || !c.h) return false;
+      var w = el.clientWidth;
+      var h = el.clientHeight;
+      if (w <= 0 || h <= 0) return false;
+      var cols = Math.max(40, Math.floor(w / c.w));   // 至少 40 列
+      var rows = Math.max(10, Math.floor(h / c.h));   // 至少 10 行
+      if (cols !== term.cols || rows !== term.rows) {
+        term.resize(cols, rows);
+        if (typeof sendCmd === 'function') {
+          sendCmd({cmd: 'resize', cols: cols, rows: rows});
+        }
+        console.log('[Lemon] resize cols=' + cols + ' rows=' + rows +
+                    ' cellW=' + c.w.toFixed(1) + ' cellH=' + c.h.toFixed(1) +
+                    ' containerW=' + w + ' containerH=' + h);
+        // 常驻尺寸显示：直接写在界面上，无需 F12
+        var sizeEl = document.getElementById('term-size');
+        if (sizeEl) {
+          sizeEl.textContent = 'cols:' + cols + ' rows:' + rows +
+            ' cellW:' + c.w.toFixed(1) + ' containerW:' + w;
+        }
+        // ★ 405A4: alt-buffer 模式下 resize 自动强刷（Ctrl+L 穿越 PTY）
+        if (_inAltBuffer) {
+          setTimeout(function() {
+            try { sendCmd({cmd: 'input', data: '\x0c'}); } catch (e) {}
+          }, 300);
+        }
+        return true;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // ── loopFit：持续 fit 直到稳定（最多 60 帧）──
+  var _fitRAF = null;
+  function loopFit() {
+    if (_fitRAF) cancelAnimationFrame(_fitRAF);
+    var tries = 0;
+    (function step() {
+      tries++;
+      var ok = safeFit();
+      if (ok && tries < 60) {
+        _fitRAF = requestAnimationFrame(step);
+      } else {
+        _fitRAF = null;
+      }
+    })();
+  }
+
+  // ── ResizeObserver：容器变化时 fit ──
+  function startResizeObserver() {
+    try {
+      if (typeof ResizeObserver === 'undefined') return;
+      var el = document.getElementById('terminal-container');
+      if (!el) return;
+      new ResizeObserver(function() { loopFit(); }).observe(el);
+    } catch (e) {}
+  }
+
+  try {
+    term.open(document.getElementById('terminal-container'));
+  } catch (e) {
+    boot('[Lemon Terminal] term.open() 异常: ' + e.message, '#e05561');
+    return;
+  }
+
+  // ★ 405A1: 恢复上次会话缓冲区
+  function requestRestore() {
+    var sid = window.__TERM_SID__;  // ★第362章修复: 原 _sid 为函数局部变量，此处全局未定义
+    if (!sid || !ws || ws.readyState !== WebSocket.OPEN) return;
+    sendCmd({cmd: 'restore', sid: sid});
+  }
+
+  window._termWrite = function(text) { if (term) term.write(text); };
+  window._termFit = function() { try { loopFit(); } catch (e) {} };
+  window._termSerialize = doSerialize;
+  window._termInputReady = false;
+
+  // ★ 405A1: Tab 切换/最小化/关闭前主动序列化
+  document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'hidden') {
+      doSerialize();
+    } else {
+      startAutoSerialize();
+    }
+  });
+  window.addEventListener('pagehide', doSerialize);
+  window.addEventListener('beforeunload', doSerialize);
+  startAutoSerialize();
+
+  // ─
+  setTimeout(function() { loopFit(); }, 50);
+  setTimeout(function() { loopFit(); }, 300);
+  setTimeout(function() { loopFit(); }, 1000);
+  startResizeObserver();
+
+  // ═══════════════════════════════════════════════════════════
+  // 极简 WebSocket JSON 协议
+  // JS → Python: {cmd: "start"|"input"|"resize"|"interrupt"|"ping", ...}
+  // Python → JS: {evt: "ready"|"data"|"exited"|"error"|"pong", ...}
+  // ═══════════════════════════════════════════════════════════
+  var ws = null;
+  var cfg = null;
+  var _seq = 0;  // ★ 消息序列号
+  
+  // ★ 流量控制：水位线
+  var _HIGH_WATERMARK = 100000;   // 高水位线：100KB
+  var _LOW_WATERMARK = 10000;     // 低水位线：10KB
+  var _writeWatermark = 0;        // 当前写入水位
+  var _paused = false;            // PTY 是否暂停
+
+  function sendCmd(obj) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    try {
+      // ★ 添加序列号
+      obj._seq = ++_seq;
+      ws.send(JSON.stringify(obj));
+    } catch (e) {
+      console.error('[Lemon] send 失败:', e);
+    }
+  }
+
+  function setupTerminalInput() {
+    if (window._termInputBound) return;
+    window._termInputBound = true;
+
+    // ── 复制选中文本到剪贴板 ──
+    function copySelection() {
+      var sel = '';
+      try { sel = term.getSelection ? term.getSelection() : ''; } catch (e) {}
+      if (!sel) return;
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(sel).catch(function() {});
+        } else {
+          var ta = document.createElement('textarea');
+          ta.value = sel;
+          document.body.appendChild(ta);
+          ta.select();
+          try { document.execCommand('copy'); } catch (e) {}
+          document.body.removeChild(ta);
+        }
+      } catch (e) {}
+    }
+
+    // ── 从事件读剪贴板文本（粘贴用）──
+    function readClipboard(e) {
+      var text = '';
+      try {
+        if (e.clipboardData && e.clipboardData.getData) {
+          text = e.clipboardData.getData('text') || '';
+        } else if (window.clipboardData && window.clipboardData.getData) {
+          text = window.clipboardData.getData('Text') || '';
+        }
+      } catch (ex) {}
+      return text;
+    }
+
+    // ── document 级 paste（capture）：让 xterm 自己处理粘贴 ──
+    // 关键：不要直接 sendCmd 整段文本，否则 cmd.exe 收到大块写入会
+    //   1) 把 \n 当作普通字符，不执行换行
+    //   2) xterm 的当前输入行编辑状态被破坏
+    // 正确做法：term.paste(text) 会模拟逐字符按键（含 \n → \r\n），
+    //   xterm 自动回显 + onData 自然触发发到后端，单次输入。
+    document.addEventListener('paste', function(e) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      var text = readClipboard(e);
+      if (!text) return;
+      // \n 转 \r\n（Windows cmd 需要 CRLF），term.paste 内部已处理
+      // 大块粘贴加 1ms 分片间隔，避免 PTY 写入管道阻塞
+      try {
+        // 优先用 term.paste（xterm 会把每字符当作 data 事件，
+        // 由 onData 统一发到后端 + 自动回显）
+        term.paste(text);
+      } catch (err) {
+        // 降级：分片发送（每行一次，避免 PTY 阻塞）
+        var lines = text.split(/\r?\n/);
+        var i = 0;
+        function sendNext() {
+          if (i >= lines.length) return;
+          var chunk = lines[i];
+          if (chunk) sendCmd({cmd: 'input', data: chunk});
+          if (i < lines.length - 1) sendCmd({cmd: 'input', data: '\r\n'});
+          i++;
+          setTimeout(sendNext, 5);
+        }
+        sendNext();
+      }
+    }, true);
+
+    // ── 右键菜单：粘贴 / 复制 / 全选 / 清屏 / 中断 ──
+    function showContextMenu(x, y) {
+      // 先移除旧菜单
+      var old = document.getElementById('lemon-term-ctxmenu');
+      if (old) old.remove();
+      var hasSel = false;
+      try { hasSel = !!(term.hasSelection && term.hasSelection()); } catch (e) {}
+      var menu = document.createElement('div');
+      menu.id = 'lemon-term-ctxmenu';
+      menu.style.cssText = 'position:fixed;left:' + x + 'px;top:' + y + 'px;' +
+        'background:#1e1e22;border:1px solid #3a3a3f;border-radius:6px;padding:4px 0;' +
+        'box-shadow:0 8px 24px rgba(0,0,0,0.6);z-index:99999;min-width:140px;' +
+        'font-family:"Courier New",monospace;font-size:12px;';
+      function mkItem(label, enabled, onClick) {
+        var it = document.createElement('div');
+        it.textContent = label;
+        it.style.cssText = 'padding:6px 14px;cursor:' + (enabled ? 'pointer' : 'default') +
+          ';color:' + (enabled ? '#e0e0e0' : '#666');
+        if (enabled) {
+          it.onmouseover = function() { it.style.background = '#2a4d7a'; };
+          it.onmouseout = function() { it.style.background = ''; };
+          it.onclick = function(e) { e.stopPropagation(); onClick(); menu.remove(); };
+        }
+        return it;
+      }
+      // ★ v4.7.17+ 实时读剪贴板内容（用剪贴板 API 需要权限，降级用 textarea 占位）
+      menu.appendChild(mkItem('📋 粘贴', true, function() {
+        navigator.clipboard.readText().then(function(t) {
+          if (t) try { term.paste(t); } catch (e) {}
+        }).catch(function() {
+          // 降级：插入临时 textarea 让用户手动复制
+          var ta = document.createElement('textarea');
+          ta.style.cssText = 'position:fixed;left:10px;top:10px;width:300px;height:60px;z-index:99999;';
+          ta.value = '';
+          document.body.appendChild(ta);
+          ta.focus(); ta.select();
+        });
+      }));
+      menu.appendChild(mkItem('📑 复制', hasSel, function() {
+        var sel = '';
+        try { sel = term.getSelection ? term.getSelection() : ''; } catch (e) {}
+        if (sel) {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(sel).catch(function() {});
+          }
+        }
+      }));
+      menu.appendChild(mkItem('✓ 全选', true, function() {
+        try { term.selectAll(); } catch (e) {}
+      }));
+      menu.appendChild(mkItem('⌨ 中断 (Ctrl+C)', true, function() {
+        sendCmd({cmd: 'input', data: '\x03'});
+      }));
+      menu.appendChild(mkItem('⌫ 清屏 (Ctrl+L)', true, function() {
+        sendCmd({cmd: 'input', data: '\x0c'});
+      }));
+      document.body.appendChild(menu);
+      // 点击其他位置关闭菜单
+      setTimeout(function() {
+        function close(ev) {
+          if (menu.contains && !menu.contains(ev.target)) menu.remove();
+          document.removeEventListener('click', close);
+          document.removeEventListener('contextmenu', close);
+        }
+        document.addEventListener('click', close);
+        document.addEventListener('contextmenu', close);
+      }, 0);
+    }
+
+    // ── 拦截 xterm 右键，弹出自定义菜单 ──
+    term.element && term.element.addEventListener('contextmenu', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      showContextMenu(e.clientX, e.clientY);
+      return false;
+    }, true);
+    // 兜底：document 级 contextmenu 也拦截（在 xterm 内部）
+    term.element && term.element.addEventListener('contextmenu', function(e) {
+      e.preventDefault();
+    }, false);
+
+    // ── xterm 内置 key 拦截 ──
+    // 对齐 PyCharm/VS Code Windows 终端：
+    //   Ctrl+C 无选中 → 中断 \x03；有选中 → 复制
+    //   Ctrl+V → 粘贴（走 document paste 事件）
+    //   Ctrl+A → 全选终端
+    //   Ctrl+L → 清屏；Ctrl+D → EOF
+    //   Ctrl+Shift+C/V → 浏览器级复制/粘贴
+    term.attachCustomKeyEventHandler(function(e) {
+      if (e.type !== 'keydown') return true;
+      var ctrl = e.ctrlKey, shift = e.shiftKey, alt = e.altKey;
+      var k = e.key;
+      if (!ctrl || alt) return true;
+      var lk = (k || '').toLowerCase();
+
+      // Ctrl+Shift+C/V：保留浏览器复制/粘贴
+      if (shift && (lk === 'c' || lk === 'v')) return true;
+
+      if (lk === 'c') {
+        if (term.hasSelection && term.hasSelection()) {
+          e.preventDefault();
+          copySelection();
+          return false;
+        }
+        e.preventDefault();
+        sendCmd({cmd: 'input', data: '\x03'});
+        return false;
+      }
+      // Ctrl+V 不做 keydown 拦截（否则浏览器不派发 paste 事件）
+      if (lk === 'v') {
+        e.preventDefault();   // 阻止浏览器把 'v' 当字符输入
+        return false;         // 让 document paste 事件处理粘贴
+      }
+      if (lk === 'a') {
+        e.preventDefault();
+        try { term.selectAll(); } catch (ex) {}
+        return false;
+      }
+      if (lk === 'l') {
+        e.preventDefault();
+        sendCmd({cmd: 'input', data: '\x0c'});
+        return false;
+      }
+      if (lk === 'd') {
+        e.preventDefault();
+        sendCmd({cmd: 'input', data: '\x04'});
+        return false;
+      }
+      return true;
+    });
+
+    // ── 普通按键 → PTY（xterm 原生 onData）──
+    term.onData(function(data) {
+      sendCmd({cmd: 'input', data: data});
+    });
+  }
+
+  function connectWS() {
+    if (!window.__TERMINAL__ || !window.__TERMINAL__.wsPort) {
+      term.write('\x1b[33m[Lemon] 后端尚未就绪\x1b[0m\r\n');
+      return;
+    }
+    if (window._termInputReady) return;
+    cfg = window.__TERMINAL__;
+
+    if (ws && ws.readyState === WebSocket.CONNECTING) return;
+    if (ws && ws.readyState === WebSocket.OPEN) return;
+
+    boot('[Lemon Terminal] 正在连接 WebSocket…', '#6e7681');
+    var newWs;
+    try {
+      newWs = new WebSocket('ws://127.0.0.1:' + cfg.wsPort);
+      ws = newWs;
+    } catch (e) {
+      term.write('\x1b[31m[Lemon] WebSocket 创建失败: ' + e.message + '\x1b[0m\r\n');
+      return;
+    }
+    newWs.onopen = function() {
+      if (ws !== newWs) { newWs.close(); return; }
+      
+      // ★ 重置重连计数器
+      window._reconnectAttempts = 0;
+      
+      boot('[Lemon Terminal] WebSocket 已连接，发送认证...', '#6e7681');
+      console.log('[Lemon] cfg.authToken:', cfg.authToken ? '存在(长度' + cfg.authToken.length + ')' : '不存在');
+      
+      // 等真实容器尺寸到位，再启动 PTY（让 TUI 用正确 cols 启动，
+      // 避免 deveco/claude 等在 30 列下启动后不响应 resize）
+      var started = false;
+      function doStart() {
+        if (started) return;
+        // 强制再 fit 一次拿到当前 cols
+        var cols = term.cols || 0, rows = term.rows || 0;
+        // 兜底：如果 term 没初始化，先 fit 一次
+        if (cols < 20 || rows < 8) {
+          safeFit();
+          cols = term.cols || 0;
+          rows = term.rows || 0;
+        }
+        if (cols < 20) cols = 120;
+        if (rows < 8) rows = 30;
+        started = true;
+        boot('[Lemon Terminal] 启动 PTY (cols=' + cols + ', rows=' + rows + ')…', '#6e7681');
+        sendCmd({cmd: 'start', cols: cols, rows: rows});
+        setupTerminalInput();
+        window._termInputReady = true;
+        term.focus();
+      }
+      
+      // ★ 安全：发送认证消息，等待 auth_ok 后才启动
+      if (cfg.authToken) {
+        try {
+          console.log('[Lemon] 发送认证消息: token=' + cfg.authToken.substring(0, 8) + '...');
+          newWs.send(JSON.stringify({cmd: 'auth', token: cfg.authToken}));
+          // 认证成功后会在 onmessage 中触发 doStart()
+        } catch (e) {
+          term.write('\x1b[31m[Lemon] 认证消息发送失败: ' + e.message + '\x1b[0m\r\n');
+          newWs.close();
+          return;
+        }
+      } else {
+        console.warn('[Lemon] 无 authToken，跳过认证');
+        // 无 token（向后兼容），立即启动
+        requestAnimationFrame(function() {
+          requestAnimationFrame(function() {
+            safeFit();
+            requestAnimationFrame(doStart);
+          });
+        });
+        setTimeout(function() {
+          if (!started) {
+            started = true;
+            sendCmd({cmd: 'start', cols: 120, rows: 30});
+            setupTerminalInput();
+            window._termInputReady = true;
+            term.focus();
+          }
+        }, 800);
+      }
+    };
+    newWs.onerror = function(e) {
+      console.error('[Lemon] WebSocket 错误:', e);
+      term.write('\x1b[31m[Lemon] WebSocket 错误\x1b[0m\r\n');
+    };
+    
+    // ★ 认证成功后启动 PTY
+    var _authOk = false;
+    newWs.onmessage = function(ev) {
+      var obj;
+      try { obj = JSON.parse(ev.data); }
+      catch (e) { console.error('[Lemon] JSON.parse 失败:', ev.data); return; }
+      var evt = obj.evt;
+      if (evt === 'auth_ok') {
+        _authOk = true;
+        boot('[Lemon Terminal] 认证成功，等待尺寸测量...', '#6e7681');
+        // 认证成功后启动 PTY
+        requestAnimationFrame(function() {
+          requestAnimationFrame(function() {
+            safeFit();
+            requestAnimationFrame(function() {
+              var cols = term.cols || 120;
+              var rows = term.rows || 30;
+              if (cols < 20) cols = 120;
+              if (rows < 8) rows = 30;
+              boot('[Lemon Terminal] 启动 PTY (cols=' + cols + ', rows=' + rows + ')…', '#6e7681');
+              sendCmd({cmd: 'start', cols: cols, rows: rows});
+              setupTerminalInput();
+              window._termInputReady = true;
+              term.focus();
+            });
+          });
+        });
+      } else if (evt === 'data') {
+        // ★ 首个 PTY 数据到达即隐藏欢迎横幅（bootEl 是 DOM 覆盖层，不隐藏会
+        //   永久叠在终端内容上方 — 修复"两层字"残影）
+        if (bootEl && bootEl.style.display !== 'none') {
+          bootEl.style.display = 'none';
+        }
+        // ★ 流量控制：使用水位线机制
+        var data = obj.data;
+        if (data) {
+          _writeWatermark += data.length;
+          
+          // 写入 xterm.js，带回调确认
+          term.write(data, function() {
+            _writeWatermark = Math.max(_writeWatermark - data.length, 0);
+            
+            // 低于低水位线，发送 ACK 让 PTY 恢复
+            if (_writeWatermark < _LOW_WATERMARK && _paused) {
+              _paused = false;
+              sendCmd({cmd: 'resume'});
+            }
+          });
+          
+          // 超过高水位线，发送 pause 让 PTY 暂停
+          if (_writeWatermark > _HIGH_WATERMARK && !_paused) {
+            _paused = true;
+            sendCmd({cmd: 'pause'});
+          }
+        }
+      } else if (evt === 'ready') {
+        boot('[Lemon Terminal] 已就绪，可输入命令', '#4caf50');
+        // ★ 405A1: 启动完成后请求恢复上次会话缓冲区
+        requestRestore();
+      } else if (evt === 'exited') {
+        term.write('\r\n\x1b[31m[shell] 进程已退出 (' +
+                   (obj.code != null ? obj.code : -1) +
+                   ')。点「重启」恢复。\x1b[0m\r\n');
+      } else if (evt === 'restore') {
+        // ★ 405A1: 回放上次会话缓冲区
+        var rdata = obj.data || '';
+        if (rdata && !window._restoredOnce) {
+          try {
+            term.write(rdata);
+            window._restoredOnce = true;
+            term.write('\r\n\x1b[33m[回滚] 已恢复上次会话 (' +
+                       Math.round(rdata.length / 1024) + 'KB)\x1b[0m\r\n');
+          } catch (e) { console.warn('[Lemon] restore 失败:', e); }
+        }
+      } else if (evt === 'error') {
+        term.write('\r\n\x1b[31m[error] ' + (obj.msg || '') + '\x1b[0m\r\n');
+      } else if (evt === 'pong') {
+        // 心跳
+      } else {
+        console.warn('[Lemon] 未知 evt:', evt, obj);
+      }
+    };
+    newWs.onclose = function(ev) {
+      if (ws !== newWs) return;
+      console.log('[Lemon] WebSocket 断开:', ev.code, ev.reason);
+      
+      // ★ 自动重连机制（指数退避）
+      // 正常关闭(1000)或主动关闭(1001)不重连
+      // 认证失败(1008)不重连
+      var shouldReconnect = ev.code !== 1000 && ev.code !== 1001 && ev.code !== 1008;
+      
+      if (shouldReconnect && window._reconnectAttempts < window._maxReconnectAttempts) {
+        window._reconnectAttempts++;
+        var delay = window._reconnectBaseDelay * Math.pow(2, window._reconnectAttempts - 1);
+        delay = Math.min(delay, window._reconnectMaxDelay);
+        delay += Math.random() * 500;  // 添加随机抖动
+        
+        term.write('\r\n\x1b[33m[重连] 第 ' + window._reconnectAttempts + '/' + 
+                   window._maxReconnectAttempts + ' 次尝试，' + 
+                   Math.round(delay) + 'ms 后重连...\x1b[0m\r\n');
+        
+        setTimeout(function() {
+          if (!ws || ws.readyState === WebSocket.CLOSED) {
+            console.log('[Lemon] 执行自动重连...');
+            connectWS();
+          }
+        }, delay);
+      } else {
+        // 重连失败或正常关闭
+        term.write('\r\n\x1b[31m[shell] 连接已断开 (code=' + (ev.code || -1) + 
+                   ')。点「重启」恢复。\x1b[0m\r\n');
+        window._termInputReady = false;
+        window._termInputBound = false;
+        ws = null;
+      }
+    };
+  }
+
+  // ★ 自动重连配置
+  window._reconnectAttempts = 0;
+  window._maxReconnectAttempts = 5;
+  window._reconnectBaseDelay = 1000;   // 初始延迟 1s
+  window._reconnectMaxDelay = 30000;   // 最大延迟 30s
+
+  window._connectTerminal = connectWS;
+  if (window.__TERMINAL__ && window.__TERMINAL__.wsPort) connectWS();
+
+  window.addEventListener('resize', function() { loopFit(); });
+
+  console.log('[Lemon] HTML 渲染完成，DOM 元素数量:', document.querySelectorAll('*').length);
+  console.log('[Lemon] 工具栏存在:', !!document.querySelector('.tool-bar'));
+  console.log('[Lemon] 状态栏存在:', !!document.querySelector('.status-bar'));
+  console.log('[Lemon] 终端容器存在:', !!document.getElementById('terminal-container'));
+})();
+</script>
+</body>
+</html>

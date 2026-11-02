@@ -1,0 +1,56 @@
+# Lemon Bridge Configuration
+# Override with environment variables or edit this file
+
+bridge:
+  host: "0.0.0.0"
+  port: 8765
+  cors_origins:
+    - "*"
+  max_connections: 100
+  session_timeout: 3600
+
+general:
+  language: "zh"
+  reopen_last_session: true
+
+ai:
+  model: "auto"
+  temperature: 0.7
+  max_tokens: 4096
+  system_prompt: ""
+  enable_skills: true
+
+engines:
+  ollama:
+    host: "127.0.0.1"
+    port: 11434
+    model: "qwen2.5-coder:7b"
+  deepseek:
+    api_key: ""
+    model: "deepseek-chat"
+    api_base: "https://api.deepseek.com"
+  lmstudio:
+    host: "127.0.0.1"
+    port: 1234
+    model: "auto"
+
+sandbox:
+  cpu_limit: 2
+  memory_limit_mb: 1024
+  timeout_seconds: 30
+  use_docker: false
+
+files:
+  upload_dir: ""
+  max_size_mb: 50
+  cleanup_hours: 24
+
+appearance:
+  theme: "cyber"
+  font_size: 14
+  code_font: "Consolas"
+
+visualization:
+  chart_style: "neon"
+  render_quality: "high"
+  animation: true

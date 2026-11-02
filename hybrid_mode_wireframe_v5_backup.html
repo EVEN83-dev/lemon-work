@@ -1,0 +1,1837 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lemon Code · 混合模式</title>
+<style>
+/* ============ 复用 mimo_page.html 主主题 style token ============ */
+/* v5.P1a: standard_mode token — 对齐 standard_mode/ui/theme.py */
+:root {
+  /* 背景层级 */
+  --bg-root: #080808;
+  --bg-primary: #0d0d0d;
+  --bg-secondary: #111111;
+  --bg-surface: #161616;
+  --bg-hover: #1c1c1c;
+  --bg-active: #222222;
+  /* 边框 */
+  --border-subtle: #1a1a1a;
+  --border-default: #252525;
+  --border-strong: #333333;
+  --border-focus: #ff6900;
+  /* 兼容旧引用 */
+  --border-color: var(--border-subtle);
+  --border-hover: rgba(255,105,0,0.3);
+  /* 文字层级 */
+  --text-primary: #ffffff;
+  --text-secondary: #b0b0b0;
+  --text-tertiary: #808080;
+  --text-muted: #555555;
+  --text-disabled: #3a3a3a;
+  /* 品牌色 */
+  --brand: #ff6900;
+  --brand-light: #ff8c42;
+  --brand-dark: #cc5400;
+  --mi-orange: #ff6900;
+  --mi-orange-light: #ff8c42;
+  --mi-orange-dark: #cc5400;
+  /* 语义 token (替换霓虹色) */
+  --success: #4caf50;
+  --error: #ff5252;
+  --warning: #ffab40;
+  --info: #448aff;
+  /* 兼容旧引用 */
+  --neon-green: var(--success);
+  --neon-pink: var(--error);
+  --neon-cyan: var(--info);
+  --stuck: var(--warning);
+  --accent-color: var(--brand);
+  --accent-glow: rgba(255,105,0,0.35);
+  --accent-hover: rgba(255,105,0,0.12);
+  /* 几何 */
+  --radius: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --font: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+  --mono: "Cascadia Code", "Consolas", "Fira Code", monospace;
+  /* 动画 */
+  --dur-fast: 150ms;
+  --dur-normal: 200ms;
+  --dur-slow: 300ms;
+  --ease: ease;
+}
+
+/* v5.P1a: 双形态顶栏 */
+.topbar-mode {
+  display: flex; background: var(--bg-surface);
+  border: 1px solid var(--border-default); border-radius: var(--radius); padding: 2px;
+  margin-left: 8px;
+}
+.topbar-mode .mm {
+  padding: 3px 14px; border-radius: calc(var(--radius) - 1px);
+  cursor: pointer; font-size: 11.5px; color: var(--text-tertiary);
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+  white-space: nowrap;
+}
+.topbar-mode .mm.active {
+  background: var(--brand); color: #000; font-weight: 600;
+}
+.topbar .tab[data-view] { transition: background var(--dur-fast) var(--ease); }
+/* 引擎灯真探活 */
+.engine-chip .dot { transition: background var(--dur-normal) var(--ease), box-shadow var(--dur-normal) var(--ease); }
+.engine-chip .dot.online { background: var(--success); box-shadow: 0 0 4px var(--success); }
+.engine-chip .dot.offline { background: var(--error); box-shadow: none; }
+.engine-chip .dot.checking { background: var(--warning); animation: pulse 0.8s infinite; }
+
+
+/* v5.P1a: 公司形态 */
+#view-company {
+  display: none; height: calc(100vh - 44px); overflow-y: auto;
+  padding: 16px; background: var(--bg-root);
+}
+#view-company.active { display: block; }
+.company-header {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 14px;
+}
+.company-title { font-size: 15px; font-weight: 700; }
+.formation-switch {
+  display: flex; background: var(--bg-surface);
+  border: 1px solid var(--border-default); border-radius: var(--radius); padding: 2px;
+  margin-left: auto;
+}
+.formation-switch .fs {
+  padding: 3px 10px; border-radius: calc(var(--radius) - 1px);
+  cursor: pointer; font-size: 11px; color: var(--text-tertiary);
+  transition: var(--dur-fast) var(--ease);
+}
+.formation-switch .fs.active { background: var(--brand); color: #000; font-weight: 600; }
+/* CEO 大卡 */
+.ceo-card {
+  border: 1px solid var(--border-strong); border-radius: var(--radius-lg);
+  padding: 14px 16px; margin-bottom: 14px; background: var(--bg-surface);
+  display: flex; align-items: center; gap: 14px;
+}
+.ceo-card .ceo-ico {
+  width: 48px; height: 48px; border-radius: var(--radius);
+  background: var(--bg-active); display: flex; align-items: center;
+  justify-content: center; flex-shrink: 0;
+  border: 1px solid var(--border-strong);
+}
+.ceo-card .ceo-ico svg { width: 28px; height: 28px; }
+.ceo-card .ceo-info { flex: 1; }
+.ceo-card .ceo-name { font-size: 14px; font-weight: 700; }
+.ceo-card .ceo-role { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
+.ceo-card .ceo-status {
+  display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-secondary);
+}
+.ceo-card .ceo-actions { display: flex; gap: 6px; }
+/* 员工网格 */
+.employee-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 10px;
+}
+.emp-card {
+  border: 1px solid var(--border-subtle); border-radius: var(--radius);
+  padding: 10px 12px; background: var(--bg-surface);
+  transition: border-color var(--dur-fast) var(--ease);
+  position: relative;
+}
+.emp-card:hover { border-color: var(--border-strong); }
+.emp-card.offside { border-style: dashed; border-color: var(--border-default); opacity: .65; }
+.emp-card .emp-head { display: flex; align-items: center; gap: 8px; }
+.emp-card .emp-ico {
+  width: 28px; height: 28px; border-radius: calc(var(--radius) - 1px);
+  background: var(--bg-active); display: flex; align-items: center;
+  justify-content: center; flex-shrink: 0;
+}
+.emp-card .emp-ico svg { width: 16px; height: 16px; stroke: var(--text-secondary); }
+.emp-card .emp-name { font-size: 12px; font-weight: 600; }
+.emp-card .emp-role { font-size: 10px; color: var(--text-tertiary); }
+.emp-card .emp-status {
+  position: absolute; top: 10px; right: 12px;
+  width: 8px; height: 8px; border-radius: 50%;
+}
+.emp-card .emp-status.running { background: var(--brand); }
+.emp-card .emp-status.busy { background: var(--warning); }
+.emp-card .emp-status.offline { background: var(--text-muted); }
+.emp-card .emp-meta { margin-top: 6px; font-size: 10.5px; color: var(--text-tertiary); line-height: 1.5; }
+.emp-card .emp-meta span { color: var(--text-secondary); }
+.emp-card .emp-tasks { margin-top: 8px; display: flex; gap: 4px; flex-wrap: wrap; }
+.emp-card .emp-tasks .et {
+  font-size: 10px; padding: 1px 6px; border-radius: 4px;
+  background: rgba(255,255,255,0.04); color: var(--text-tertiary);
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.emp-card .emp-actions { margin-top: 8px; display: flex; gap: 4px; }
+.emp-card .emp-btn {
+  flex: 1; font-size: 10px; padding: 3px 0; border-radius: 4px;
+  border: 1px solid var(--border-subtle); color: var(--text-secondary);
+  background: none; cursor: pointer; text-align: center;
+  transition: var(--dur-fast) var(--ease);
+}
+.emp-card .emp-btn:hover { border-color: var(--border-hover); color: var(--brand-light); }
+.emp-card.offside .emp-hire {
+  display: flex; align-items: center; justify-content: center;
+  height: 100%; min-height: 80px; cursor: pointer;
+  color: var(--text-tertiary); font-size: 11px;
+  flex-direction: column; gap: 6px;
+}
+.emp-card.offside .emp-hire:hover { color: var(--brand-light); }
+.emp-card .emp-success {
+  position: absolute; top: 10px; right: 22px; font-size: 9px;
+  color: var(--success); background: rgba(76,175,80,0.1);
+  padding: 0 4px; border-radius: 3px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font);
+  font-size: 13px;
+  overflow: hidden;
+}
+/* ============ 顶栏 ============ */
+.topbar {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 14px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  position: relative;
+  z-index: 10;
+}
+.topbar .logo { font-size: 15px; font-weight: 700; letter-spacing: .5px; white-space: nowrap; }
+.topbar .logo .badge {
+  display: inline-block; margin-left: 6px; padding: 1px 7px;
+  font-size: 10px; font-weight: 600; color: #000;
+  background: var(--mi-orange); border-radius: 999px; vertical-align: 2px;
+}
+.topbar .tabs { display: flex; gap: 4px; margin-left: 14px; }
+.topbar .tab {
+  padding: 5px 14px; border-radius: 6px; cursor: pointer;
+  color: var(--text-secondary); font-size: 12.5px; border: 1px solid transparent;
+}
+.topbar .tab.active { color: var(--mi-orange); background: var(--accent-hover); border-color: var(--border-hover); }
+.topbar .tab:hover { color: var(--text-primary); background: rgba(255,255,255,0.05); }
+.topbar .spacer { flex: 1; }
+/* 引擎状态 */
+.engine-chip {
+  display: flex; align-items: center; gap: 7px;
+  padding: 4px 10px; border-radius: 999px;
+  border: 1px solid var(--border-color); background: var(--bg-input);
+  font-size: 11.5px; color: var(--text-secondary);
+}
+.engine-chip .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--neon-green); box-shadow: 0 0 3px var(--success); }
+
+
+.engine-chip b { color: var(--text-primary); font-weight: 600; }
+.engine-chip + .engine-chip { margin-left: 6px; }
+/* 模式切换 */
+.mode-switch { display: flex; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 999px; padding: 2px; }
+.mode-switch .m { padding: 3px 12px; border-radius: 999px; cursor: pointer; font-size: 11.5px; color: var(--text-secondary); }
+.mode-switch .m.active { background: var(--brand); color: #000; font-weight: 600; }
+/* ============ 三栏容器 ============ */
+.workspace { display: flex; flex: 1; overflow: hidden; }
+.workspace-bottom { display: flex; flex-direction: column; flex-shrink: 0; height: 212px; }
+body { display: flex; flex-direction: column; height: 100vh; }
+.topbar { flex-shrink: 0; }
+#view-company { flex: 1; overflow-y: auto; }
+/* 左栏：任务管理 */
+.panel-left {
+  width: 264px; min-width: 220px;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-color);
+  display: flex; flex-direction: column;
+  overflow-y: auto;
+}
+/* 中栏：指挥台 */
+.panel-mid { flex: 1; min-width: 360px; display: flex; flex-direction: column; background: var(--bg-primary); }
+/* 右栏：Agent 控制中心 */
+.panel-right {
+  width: 336px; min-width: 280px;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border-color);
+  display: flex; flex-direction: column;
+  overflow-y: auto;
+}
+/* ============ 通用卡片 ============ */
+.card { background: var(--bg-panel); border: 1px solid var(--border-color); border-radius: var(--radius); padding: 10px 12px; margin: 10px; }
+.card .card-h { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; font-size: 12px; font-weight: 700; color: var(--text-secondary); }
+.card .card-h .hint { margin-left: auto; font-size: 10.5px; font-weight: 400; color: var(--text-muted); }
+/* ============ 左栏：工作流时间线 ============ */
+.steps { list-style: none; }
+.steps li { display: flex; align-items: center; gap: 8px; padding: 5px 0; position: relative; }
+.steps li::before { content: ""; position: absolute; left: 6px; top: 22px; bottom: -10px; width: 2px; background: var(--border-color); }
+.steps li:last-child::before { display: none; }
+.step-ico { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--border-color); flex-shrink: 0; }
+.step-ico.done { background: var(--neon-green); border-color: var(--neon-green); box-shadow: 0 0 3px var(--success); }
+.step-ico.active { background: var(--mi-orange); border-color: var(--mi-orange); box-shadow: 0 0 4px var(--accent-glow); }
+.step-ico.todo { background: transparent; }
+.steps li .st-name { flex: 1; }
+.steps li.done .st-name { color: var(--text-muted); text-decoration: line-through; }
+.steps li.active .st-name { color: var(--mi-orange-light); font-weight: 600; }
+@keyframes pulse { 0%,100% { opacity:.7;} 50% { opacity:1;} }
+/* ============ 任务队列 ============ */
+.task-item { border: 1px solid var(--border-color); border-radius: 6px; padding: 7px 9px; margin-bottom: 7px; background: rgba(255,255,255,0.02); }
+.task-item .t-head { display: flex; align-items: center; gap: 6px; }
+.task-item .t-status { font-size: 10px; padding: 1px 7px; border-radius: 999px; }
+.t-status.run { background: rgba(255,105,0,0.15); color: var(--brand-light); }
+.t-status.wait { background: rgba(255,255,255,0.06); color: var(--text-muted); }
+.t-status.done { background: rgba(76,175,80,0.12); color: var(--success); }
+.task-item .t-title { flex: 1; font-size: 12px; }
+.task-item .t-branch { font-family: Consolas, monospace; font-size: 10px; color: var(--info); margin-top: 4px; }
+.task-item .t-bar { height: 3px; border-radius: 2px; background: var(--bg-tertiary); margin-top: 6px; overflow: hidden; }
+.task-item .t-bar i { display: block; height: 100%; background: var(--brand); }
+/* ============ 中栏：对话 ============ */
+.chat-flow { flex: 1; overflow-y: auto; padding: 14px 16px; }
+.msg { display: flex; gap: 9px; margin-bottom: 12px; }
+.msg .avatar { width: 26px; height: 26px; border-radius: 7px; background: var(--bg-tertiary); display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; border: 1px solid var(--border-color); }
+.msg .bubble { max-width: 78%; padding: 8px 11px; border-radius: 10px; background: var(--bg-panel); border: 1px solid var(--border-color); font-size: 12.5px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
+.msg .bubble .who { font-size: 11px; color: var(--text-muted); margin-bottom: 3px; }
+.msg .bubble .who b { color: var(--mi-orange-light); }
+.msg.sys .bubble { background: rgba(255,105,0,0.05); border-color: rgba(255,105,0,0.2); }
+.msg .bubble .tag { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 4px; margin-left: 6px; background: var(--accent-hover); color: var(--mi-orange-light); }
+/* DoD 清单 */
+.dod-list { margin-top: 5px; padding-left: 16px; font-size: 11.5px; color: var(--text-secondary); }
+.dod-list li { margin: 2px 0; }
+/* Diff 摘要 */
+.diff-summary {
+  margin: 0 16px 8px; padding: 7px 12px; border-radius: 6px;
+  background: rgba(68,138,255,0.08); border: 1px solid rgba(68,138,255,0.2);
+  display: flex; gap: 14px; font-size: 11.5px; color: var(--text-secondary);
+}
+.diff-summary b { color: var(--info); }
+/* 输入区 */
+.input-area { border-top: 1px solid var(--border-color); background: var(--bg-secondary); padding: 10px 16px; }
+.input-box { background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 10px; padding: 9px 12px; display: flex; align-items: center; gap: 8px; }
+.input-box input { flex: 1; background: none; border: none; outline: none; color: var(--text-primary); font-size: 13px; font-family: var(--font); }
+.input-box input::placeholder { color: var(--text-muted); }
+.act-btn { padding: 5px 12px; border-radius: 7px; border: 1px solid var(--border-hover); background: var(--accent-hover); color: var(--mi-orange-light); font-size: 12px; cursor: pointer; white-space: nowrap; }
+.act-btn.solid { background: var(--mi-orange); color: #000; font-weight: 600; border-color: var(--mi-orange); }
+.act-btn:hover { filter: brightness(1.15); }
+.model-sel { background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-secondary); border-radius: 7px; padding: 5px 8px; font-size: 12px; outline: none; }
+.input-tools { display: flex; align-items: center; gap: 10px; margin-top: 7px; }
+.input-tools .tip { font-size: 11px; color: var(--text-muted); }
+/* ============ 右栏：监控统计 ============ */
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.stat { background: var(--bg-panel); border: 1px solid var(--border-color); border-radius: var(--radius); padding: 8px 10px; }
+.stat .num { font-size: 19px; font-weight: 700; }
+.stat .lbl { font-size: 10.5px; color: var(--text-muted); margin-top: 1px; }
+.stat .num.orange { color: var(--mi-orange-light); }
+.stat .num.green { color: var(--success); }
+.stat .num.cyan { color: var(--info); }
+/* ============ 右栏：Agent 卡片 ============ */
+.agent-card { border: 1px solid var(--border-color); border-radius: var(--radius); padding: 9px 11px; margin-bottom: 8px; background: rgba(255,255,255,0.02); }
+.agent-card .a-head { display: flex; align-items: center; gap: 7px; }
+.agent-card .a-ico { width: 24px; height: 24px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 13px; background: var(--bg-tertiary); border: 1px solid var(--border-color); }
+.agent-card .a-name { font-size: 12.5px; font-weight: 600; }
+.agent-card .a-role { font-size: 10.5px; color: var(--text-muted); }
+.a-status { margin-left: auto; display: flex; align-items: center; gap: 5px; font-size: 10.5px; }
+.a-status .sd { width: 8px; height: 8px; border-radius: 50%; }
+.a-status.working .sd { background: var(--mi-orange); box-shadow: 0 0 3px var(--accent-glow); }
+.a-status.completed .sd { background: var(--neon-green); box-shadow: 0 0 3px var(--success); }
+.a-status.stalled .sd, .a-status.stuck .sd { background: var(--stuck); box-shadow: 0 0 3px var(--warning); }
+.a-status.failed .sd { background: var(--neon-pink); box-shadow: 0 0 3px var(--error); }
+.a-status.idle .sd { background: var(--text-tertiary); }
+.a-status .stx { color: var(--text-secondary); }
+.a-progress { height: 3px; border-radius: 2px; background: var(--bg-tertiary); margin: 6px 0 0; overflow: hidden; }
+.a-progress i { display: block; height: 100%; background: var(--brand); }
+.a-model { font-size: 10px; color: var(--text-muted); margin-top: 4px; font-family: Consolas, monospace; }
+.a-actions { display: flex; gap: 5px; margin-top: 7px; }
+.a-btn { font-size: 10.5px; padding: 2px 9px; border-radius: 5px; border: 1px solid var(--border-color); color: var(--text-secondary); cursor: pointer; background: none; }
+.a-btn:hover { border-color: var(--border-hover); color: var(--mi-orange-light); }
+/* 指挥 Agent 特殊样式 */
+.agent-card.lead { border-color: rgba(255,105,0,0.4); background: rgba(255,105,0,0.04); }
+.agent-card.lead .a-name { color: var(--mi-orange-light); }
+/* ============ 右栏：验收节奏 ============ */
+.ckpt { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 11.5px; }
+.ckpt .c-dot { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--border-color); }
+.ckpt.done .c-dot { background: var(--neon-green); border-color: var(--neon-green); box-shadow: 0 0 3px var(--success); }
+.ckpt.due .c-dot { background: var(--mi-orange); border-color: var(--mi-orange); box-shadow: 0 0 3px var(--accent-glow); }
+.ckpt .c-time { color: var(--text-muted); width: 52px; }
+.ckpt.done .c-name { color: var(--text-muted); }
+/* 产物层 */
+.prod-item { display: flex; align-items: center; gap: 7px; padding: 5px 0; font-size: 11.5px; cursor: pointer; color: var(--text-secondary); }
+.prod-item:hover { color: var(--mi-orange-light); }
+.prod-item .p-ico { width: 22px; height: 22px; border-radius: 5px; background: var(--bg-tertiary); display: flex; align-items: center; justify-content: center; font-size: 11px; }
+/* 计划书 DoD 卡片 */
+.book-line { font-size: 11px; color: var(--text-secondary); padding: 3px 0; border-left: 2px solid var(--mi-orange); padding-left: 8px; margin: 4px 0; }
+.book-line .bl-tag { color: var(--mi-orange-light); font-weight: 600; }
+/* 滚动条 */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,105,0,0.4); }
+/* ============ [v4.5] 视图切换 ============ */
+.mid-view { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.mid-view.hidden { display: none; }
+.view-list { padding: 14px 16px; overflow-y: auto; flex: 1; }
+.view-item { border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; background: rgba(255,255,255,0.02); font-size: 12px; }
+.view-item .vi-h { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; flex-wrap: wrap; }
+.view-item .vi-h b { color: var(--mi-orange-light); }
+.view-item pre { font-size: 11px; color: var(--text-secondary); white-space: pre-wrap; word-break: break-word; margin-top: 4px; font-family: Consolas, monospace; }
+.verify-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 11.5px; border-bottom: 1px dashed var(--border-color); }
+.verify-row .v-mark { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.verify-row.ok .v-mark { background: var(--neon-green); box-shadow: 0 0 3px var(--success); }
+.verify-row.bad .v-mark { background: var(--neon-pink); box-shadow: 0 0 3px var(--error); }
+.verify-row.warn .v-mark { background: var(--stuck); box-shadow: 0 0 3px var(--warning); }
+.verify-row .v-txt { flex: 1; color: var(--text-secondary); }
+.verify-row .v-txt b { color: var(--text-primary); }
+/* 线框水印 */
+.wf-note {
+  position: fixed; right: 10px; bottom: 8px; z-index: 99;
+  font-size: 10px; color: rgba(255,255,255,0.18);
+  letter-spacing: 1px; user-select: none;
+}
+</style>
+</head>
+<body>
+
+<!-- ==================== 顶栏 ==================== -->
+<div class="topbar">
+  <div class="logo">混合模式<span class="badge">Lemon Agent</span></div>
+  <div class="topbar-mode" id="topbar-mode">
+    <div class="mm active" data-shape="workbench">工作台</div>
+    <div class="mm" data-shape="company">公司</div>
+  </div>
+  <div class="tabs" id="top-tabs">
+    <div class="tab active" data-view="command">指挥台</div>
+    <div class="tab" data-view="task">任务</div>
+    <div class="tab" data-view="artifact">产物层</div>
+    <div class="tab" data-view="longrun">长跑监控</div>
+  </div>
+  <div class="spacer"></div>
+  <button class="act-btn" id="role-config-btn">角色配置</button>
+  <div class="engine-chip"><span class="dot off" id="ollama-dot"></span>Ollama <b id="ollama-txt">检测中</b></div>
+  <div class="engine-chip"><span class="dot off" id="mimo-dot"></span>MIMO <b id="mimo-txt">检测中</b></div>
+  <div class="mode-switch" id="mode-switch">
+    <div class="m" data-mode="standard">标准</div>
+    <div class="m active" data-mode="hybrid">混合</div>
+    <div class="m" data-mode="miemie">咩咩</div>
+  </div>
+</div>
+
+<div class="workspace">
+  <!-- ==================== 左栏：任务管理 ==================== -->
+  <div class="panel-left">
+    <div class="card">
+      <div class="card-h">工作流 <span class="hint">1 总指挥 + 5 职能</span></div>
+      <ul class="steps" id="workflow-steps">
+        <li class="done"><span class="step-ico done"></span><span class="st-name">接收需求</span></li>
+        <li class="done"><span class="step-ico done"></span><span class="st-name">需求确认</span></li>
+        <li class="active"><span class="step-ico active"></span><span class="st-name">任务分解（DoD）</span></li>
+        <li><span class="step-ico todo"></span><span class="st-name">并行开发</span></li>
+        <li><span class="step-ico todo"></span><span class="st-name">测试验收</span></li>
+        <li><span class="step-ico todo"></span><span class="st-name">交付报告</span></li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="card-h">任务队列 <span class="hint">并行 × Worktree</span></div>
+      <div id="task-queue-items"><div class="view-item">任务加载中…</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">计划书 → DoD <span class="hint">拍板#4</span></div>
+      <div id="plan-lines"><div class="book-line">等待策划书输入…</div></div>
+      <div style="margin-top:8px"><button class="act-btn solid" id="dispatch-btn">派发给总指挥</button></div>
+    </div>
+  </div>
+
+  <!-- ==================== 中栏：多视图 ==================== -->
+  <div class="panel-mid">
+    <!-- 指挥台视图 -->
+    <div class="mid-view" id="view-command">
+      <div class="chat-flow" id="chat-flow">
+        <div class="msg sys">
+          <div class="avatar">SYS</div>
+          <div class="bubble">
+            <div class="who"><b>系统</b> · 初始化</div>
+            <span id="boot-msg">混合模式启动中，正在连接后端桥接…</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="diff-summary" style="display:none">
+        <span>变更 <b id="diff-files">0</b> 个文件 · <b id="diff-lines">+0</b> 行</span>
+      </div>
+
+
+    <!-- v5.P2: 计划预览卡 -->
+    <div class="plan-preview" id="plan-preview-card">
+      <div class="pp-h">计划预览 <span id="pp-count" style="font-weight:400;color:var(--text-tertiary)"></span></div>
+      <div id="pp-tasks"></div>
+      <div class="pp-actions">
+        <button class="act-btn" id="pp-cancel"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg> 修改</button>
+        <button class="act-btn solid" id="pp-approve"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg> 拍板派发</button>
+      </div>
+    </div>
+
+      <div class="input-area">
+        <div class="input-box">
+          <input id="agent-input" placeholder="给总指挥下需求，或粘贴策划书 / 上传 Figma / 截图（Design Mode）…">
+          <select class="model-sel" id="model-sel">
+            <option value="qwen2.5:1.5b" data-fallback="1">qwen2.5:1.5b</option>
+            <option value="qwen3.5:4b" data-fallback="1">qwen3.5:4b</option>
+            <option value="qwen3.5:9b" data-fallback="1">qwen3.5:9b</option>
+            <option value="qwen3-vl:4b" data-fallback="1">qwen3-vl:4b</option>
+            <option value="aleshribar3/deepseek-r1-tool-calling:8b" data-fallback="1">deepseek-r1-tool-calling:8b</option>
+          </select>
+          <button class="act-btn solid" id="send-btn">派发任务</button>
+        </div>
+        <div class="input-tools">
+          <div class="engine-chip"><span class="dot" id="route-dot"></span><b>混合路由</b> 本地记忆 + API 算力</div>
+          <span class="tip">Enter 发送 · Shift+Enter 换行</span>
+          <span class="tip">Best-of-N：同一任务可多模型并排择优</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 任务视图（H4 任务分配 / M1 查看任务 / H5 查验模式） -->
+    <div class="mid-view hidden" id="view-task">
+      <div class="view-list">
+        <div class="card" style="margin:0 0 10px">
+          <div class="card-h">工作流状态 <span class="hint">getWorkflowStatus</span></div>
+          <ul class="steps" id="wf-steps"><li><span class="step-ico todo"></span><span class="st-name">加载中…</span></li></ul>
+        </div>
+        <div class="card" style="margin:0 0 10px">
+          <div class="card-h">任务分配 <span class="hint">H4 · 选 Agent 派发</span></div>
+          <div class="input-box" style="margin-bottom:6px">
+            <select class="model-sel" id="task-agent-sel"></select>
+            <input id="task-input" placeholder="给该 Agent 派发任务描述…">
+            <button class="act-btn solid" id="task-send-btn">派发</button>
+          </div>
+          <div id="task-list"><div class="view-item">加载任务中…</div></div>
+        </div>
+        <div class="card" style="margin:0">
+          <div class="card-h">查验模式 <span class="hint">H5 · 基于实时数据核对</span></div>
+          <div id="verify-list"><div class="view-item">点击「运行查验」核对各 Agent 状态与工作流进度</div></div>
+          <div style="margin-top:8px"><button class="act-btn solid" id="verify-btn">运行查验</button></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 产物层视图（M5 查看输出） -->
+    <div class="mid-view hidden" id="view-artifact">
+      <div class="view-list" id="artifact-list"><div class="view-item">加载产物中…</div></div>
+    </div>
+
+    <!-- 长跑监控视图（M4 运行统计） -->
+    <div class="mid-view hidden" id="view-longrun">
+      <div class="view-list">
+        <div class="card" style="margin:0 0 10px">
+          <div class="card-h">运行统计 <span class="hint">getMonitorData</span></div>
+          <div class="stats" id="lr-stats">
+            <div class="stat"><div class="num" id="lr-total">-</div><div class="lbl">Agent 总数</div></div>
+            <div class="stat"><div class="num" id="lr-running">-</div><div class="lbl">运行中</div></div>
+            <div class="stat"><div class="num" id="lr-done">-</div><div class="lbl">已完成</div></div>
+            <div class="stat"><div class="num" id="lr-engine">-</div><div class="lbl">引擎在线</div></div>
+          </div>
+        </div>
+        <div class="card" style="margin:0 0 10px">
+          <div class="card-h">Orchestrator <span class="hint">getOrchestratorStatus</span></div>
+          <div id="lr-orch" class="view-item">加载中…</div>
+        </div>
+        <div class="card" style="margin:0">
+          <div class="card-h">多实例集群 <span class="hint">getMultiInstanceStatus</span></div>
+          <div id="lr-multi" class="view-item">加载中…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 右栏：Agent 控制中心 ==================== -->
+  <div class="panel-right">
+    <div class="card" style="margin-bottom:0">
+      <div class="card-h">运行监控 <span class="hint">实时</span></div>
+      <div class="stats">
+        <div class="stat"><div class="num orange" id="stat-total">-</div><div class="lbl">Agent 总数</div></div>
+        <div class="stat"><div class="num orange" id="stat-running">-</div><div class="lbl">运行中</div></div>
+        <div class="stat"><div class="num green" id="stat-done">-</div><div class="lbl">已完成</div></div>
+        <div class="stat"><div class="num cyan" id="stat-engine">-</div><div class="lbl">引擎在线</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">Agent 控制中心 <span class="hint">实时数据 · getAgentsInfo</span></div>
+      <div id="agent-cards"><div class="view-item">正在加载 Agent 列表…</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">人类验收节奏 <span class="hint">拍板#5 · 每天 4 次</span></div>
+      <div id="ckpt-list"><div class="view-item">…</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">共享产物层 <span class="hint">PROGRESS/TASKS</span></div>
+      <div id="artifact-items"><div class="view-item">产物加载中…</div></div>
+    </div>
+
+    <!-- 卡片: 公司架构 · 跨窗派发（标准/咩咩/几维鸟 从孤岛接回运行时） -->
+    <div class="card" id="cw-card">
+      <div class="card-h">公司架构 · 跨窗派发 <span class="hint">标准 / 咩咩 / 几维鸟</span></div>
+      <div id="cw-status" style="font-size:12px;color:#9aa;margin-bottom:8px">正在加载三窗状态…</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button onclick="dispatchCrossWindow('standard')" style="flex:1;min-width:80px;padding:8px;border:1px solid #3a4a5a;background:#16202c;color:#cfe;cursor:pointer;border-radius:6px">标准模式</button>
+        <button onclick="dispatchCrossWindow('miemie')" style="flex:1;min-width:80px;padding:8px;border:1px solid #3a4a5a;background:#16202c;color:#cfe;cursor:pointer;border-radius:6px">咩咩</button>
+        <button onclick="dispatchCrossWindow('kiwi')" style="flex:1;min-width:80px;padding:8px;border:1px solid #3a4a5a;background:#16202c;color:#cfe;cursor:pointer;border-radius:6px">几维鸟</button>
+      </div>
+      <div id="cw-result" style="margin-top:10px;font-size:12px;line-height:1.6"></div>
+    </div>
+  </div>
+</div>
+
+
+<!-- v5.P3: 启动公司 + Run 历史 -->
+<div class="startup-bar" id="startup-bar">
+  <button class="act-btn solid" id="start-company-btn">启动公司</button>
+  <button class="act-btn" id="formation-pick-btn">编制: 1+5</button>
+  <span style="flex:1"></span>
+  <button class="act-btn" id="run-history-btn">Run 历史 ▾</button>
+</div>
+<div class="run-history" id="run-history-dropdown"></div>
+
+<!-- v5.P1b: 底部 Tab + 面板 -->
+<div class="workspace-bottom">
+  <div class="bottom-panel active" id="bp-agent">
+    <div class="bp-header">Agent 调控<span class="spacer"></span>
+      <span class="bp-chip active" data-filter="all">全部</span>
+      <span class="bp-chip" data-filter="online">在线</span>
+      <span class="bp-chip" data-filter="offline">离线</span>
+    </div>
+    <div class="bp-body">
+      <div class="bp-left" id="bp-agent-list"></div>
+      <div class="bp-right">
+        <div class="bp-msg-area" id="bp-agent-msgs"></div>
+        <div class="bp-input">
+          <input id="bp-agent-input" placeholder="给选中 Agent 发指令...">
+          <button class="act-btn solid" id="bp-agent-send">发送</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="bottom-panel" id="bp-chatlog">
+    <div class="bp-header">交流区 / 工作日志<span class="spacer"></span>
+      <span class="bp-chip active" data-type="all">全部</span>
+      <span class="bp-chip" data-type="agent">员工动态</span>
+      <span class="bp-chip" data-type="system">系统</span>
+      <span class="bp-chip" data-type="user">人工</span>
+      <span class="bp-tools">
+        <button class="bp-tool-btn" id="bp-save-md">导出 MD</button>
+        <button class="bp-tool-btn" id="bp-clear-msgs">清空</button>
+      </span>
+    </div>
+    <div class="bp-msg-area" id="bp-chatlog-msgs"></div>
+  </div>
+  <div class="bottom-panel" id="bp-skilllog">
+    <div class="bp-header">Skill 日志</div>
+    <div class="bp-msg-area" id="bp-skilllog-content">
+      <div class="bp-empty">
+        <div>Skill 统计将在 Skill 引擎接入后启用</div>
+        <div style="font-size:11px;opacity:.7">所有 Skill 调用数据流将在此面板显示</div>
+      </div>
+    </div>
+  </div>
+  <div class="bottom-tabs">
+    <div class="bottom-tab active" data-panel="bp-agent">Agent 调控</div>
+    <div class="bottom-tab" data-panel="bp-chatlog">交流区</div>
+    <div class="bottom-tab" data-panel="bp-skilllog">Skill 日志</div>
+    <div style="flex:1"></div>
+    <div class="bottom-tab" id="bp-goto-standard" style="border-right:none;border-left:1px solid var(--border-subtle)" title="切换到标准模式终端面板">[终端] 请用主窗底部面板</div>
+  </div>
+</div>
+
+<div class="wf-note">HYBRID WEB PANEL · 已接入后端桥接（Ollama / MIMO）</div>
+
+<!-- ==================== 公司形态视图 ==================== -->
+<div id="view-company">
+  <div class="company-header">
+    <div class="company-title">公司编制</div>
+    <div class="formation-switch" id="formation-switch">
+      <div class="fs active" data-fmt="1+2">精简 1+2</div>
+      <div class="fs" data-fmt="1+5">标准 1+5</div>
+      <div class="fs" data-fmt="full">满编 9</div>
+    </div>
+  </div>
+  <div id="ceo-slot"></div>
+  <div class="employee-grid" id="employee-grid"></div>
+</div>
+
+<!-- ==================== 后端桥接 ==================== -->
+<script src="standard_mode/ui/qwebchannel.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  // ---------- 桥接：JS → Python（经 __PYBRIDGE__ 控制台消息） ----------
+  var _cbId = 0;
+  var _cbMap = {};
+
+  function _callPython(method) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    var callback = null;
+    if (args.length && typeof args[args.length - 1] === "function") {
+      callback = args.pop();
+    }
+    var callbackId = null;
+    if (callback) {
+      _cbId += 1;
+      callbackId = _cbId;
+      _cbMap[callbackId] = callback;
+    }
+    var payload = { method: method, args: args, callbackId: callbackId };
+    console.log("__PYBRIDGE__:" + JSON.stringify(payload));
+  }
+
+  window._pybridgeCallback = function (callbackId, result) {
+    var cb = _cbMap[callbackId];
+    if (cb) {
+      delete _cbMap[callbackId];
+      try { cb(result); } catch (e) { console.error("callback error", e); }
+    }
+  };
+
+  // QWebChannel（hybridBridge 对象，可选）
+  if (typeof QWebChannel !== "undefined" && typeof qt !== "undefined" && qt.webChannelTransport) {
+    new QWebChannel(qt.webChannelTransport, function (channel) {
+      window.hybridBridge = channel.objects.hybridBridge;
+    });
+  }
+
+  // ---------- 工具函数 ----------
+  function el(id) { return document.getElementById(id); }
+  function now() {
+    var d = new Date();
+    return ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2);
+  }
+  function appendMsg(who, text, kind) {
+    var flow = el("chat-flow");
+    if (!flow) return;
+    var m = document.createElement("div");
+    m.className = "msg" + (kind === "sys" ? " sys" : "");
+    var avatar = kind === "sys" ? "SYS" : (kind === "user" ? "YOU" : "A");
+    m.innerHTML =
+      '<div class="avatar">' + avatar + '</div>' +
+      '<div class="bubble"><div class="who"><b>' + who + '</b> · ' + now() + '</div>' +
+      escapeHtml(text) + '</div>';
+    flow.appendChild(m);
+    flow.scrollTop = flow.scrollHeight;
+  }
+  function escapeHtml(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  // ---------- 引擎状态 ----------
+  function updateAIStatus(res) {
+    var ollama = res && res.ollama ? res.ollama : {};
+    var mimo = res && res.mimo ? res.mimo : {};
+    var oDot = el("ollama-dot"), oTxt = el("ollama-txt");
+    var mDot = el("mimo-dot"), mTxt = el("mimo-txt");
+    if (oDot) { oDot.className = "dot" + (ollama.online ? "" : " off"); }
+    if (oTxt) { oTxt.textContent = ollama.online ? ("在线 · " + (ollama.models || 0) + " 模型") : "离线"; }
+    if (mDot) { mDot.className = "dot" + (mimo.online ? "" : " off"); }
+    if (mTxt) { mTxt.textContent = mimo.online ? ("在线 · 端口 " + (mimo.port || "?")) : "离线"; }
+    var routeDot = el("route-dot");
+    if (routeDot) { routeDot.className = "dot" + (ollama.online ? "" : " off"); }
+    var engStat = el("stat-engine");
+    if (engStat) { engStat.textContent = (ollama.online ? 1 : 0) + (mimo.online ? 1 : 0); }
+  }
+
+  // ---------- Agent 对话 ----------
+  function sendAgent() {
+    var inp = el("agent-input");
+    var text = inp ? inp.value.trim() : "";
+    if (!text) return;
+    appendMsg("你", text, "user");
+    inp.value = "";
+    var model = el("model-sel") ? el("model-sel").value : "qwen2.5:1.5b";
+    appendMsg("总指挥", "（思考中…）", "agent");
+    _callPython("agentChatWithEngine", "ollama", model, text, function (res) {
+      // 移除占位
+      var flow = el("chat-flow");
+      if (flow && flow.lastChild && flow.lastChild.querySelector) {
+        var lastBubble = flow.lastChild.querySelector(".bubble");
+        if (lastBubble && /思考中/.test(lastBubble.textContent)) flow.removeChild(flow.lastChild);
+      }
+      if (res && res.success) {
+        appendMsg("总指挥", res.reply || "（空回复）", "agent");
+      } else {
+        appendMsg("系统", "调用失败：" + ((res && res.error) || "未知错误"), "sys");
+      }
+    });
+  }
+
+  // ---------- 模式切换 ----------
+  function bindModeSwitch() {
+    var sw = el("mode-switch");
+    if (!sw) return;
+    sw.addEventListener("click", function (e) {
+      var t = e.target;
+      if (!t || !t.classList || !t.classList.contains("m")) return;
+      var mode = t.getAttribute("data-mode");
+      var items = sw.querySelectorAll(".m");
+      for (var i = 0; i < items.length; i++) items[i].classList.remove("active");
+      t.classList.add("active");
+      _callPython("switchMode", mode, function (res) {
+        console.log("switchMode", mode, res);
+      });
+    });
+  }
+
+  // ---------- 后端 → 前端 回调（window.on*） ----------
+  window.onAgentStatusChanged = function (agentId, status, progress) {
+    var card = document.querySelector('#agent-cards .agent-card[data-id="' + agentId + '"]');
+    if (!card) return;
+    var st = card.querySelector(".a-status");
+    if (st) {
+      st.className = "a-status " + (status || "idle");
+      var tx = st.querySelector(".stx");
+      if (tx) tx.textContent = (status || "idle") + (status === "working" && typeof progress === "number" ? " " + Math.round(progress) + "%" : "");
+    }
+    var bar = card.querySelector(".a-progress i");
+    if (bar && typeof progress === "number") bar.style.width = Math.max(0, Math.min(100, progress)) + "%";
+  };
+  window.onChatMessageReceived = function (sender, content, ts) {
+    appendMsg(sender || "Agent", content || "", "agent");
+  };
+  window.onMonitorDataUpdated = function (json_data) {
+    if (!json_data) return;
+    try {
+      var d = typeof json_data === "string" ? JSON.parse(json_data) : json_data;
+      if (d.agent_count != null && el("stat-total")) el("stat-total").textContent = d.agent_count;
+      if (d.running_count != null && el("stat-running")) el("stat-running").textContent = d.running_count;
+      if (d.completed_count != null && el("stat-done")) el("stat-done").textContent = d.completed_count;
+      if (d.engines && el("stat-engine")) {
+        var online = 0;
+        Object.keys(d.engines).forEach(function (k) { if (d.engines[k].status === "online") online++; });
+        el("stat-engine").textContent = online;
+      }
+    } catch (e) { /* ignore */ }
+  };
+  window.onWorkflowStepChanged = function (stepId, status) {
+    var steps = el("workflow-steps");
+    if (!steps) return;
+    var lis = steps.querySelectorAll("li");
+    var idx = parseInt(stepId, 10);
+    if (!isNaN(idx) && lis[idx]) {
+      lis[idx].className = status === "done" ? "done" : (status === "active" ? "active" : "");
+      var ico = lis[idx].querySelector(".step-ico");
+      if (ico) ico.className = "step-ico " + (status === "done" ? "done" : (status === "active" ? "active" : "todo"));
+    }
+  };
+  window.onErrorOccurred = function (err) {
+    appendMsg("系统", "错误：" + (err || "未知"), "sys");
+  };
+  window.onAgentOutputReceived = function (agentId, text) {
+    appendMsg(agentId || "Agent", text || "", "agent");
+  };
+  window.onAgentThinkingReceived = function (agentId, thinking) {
+    // 思考过程暂不单独展示，避免刷屏
+    console.log("thinking[" + agentId + "]:", thinking);
+  };
+
+  // ============================================================
+  // [v4.5] 混合模式数据驱动面板（H2~M5）
+  // ============================================================
+  var _agentMap = {};   // id -> agent info
+
+  // ---------- 顶栏视图切换 ----------
+  function switchView(view) {
+    var tabs = document.querySelectorAll("#top-tabs .tab");
+    for (var i = 0; i < tabs.length; i++) {
+      tabs[i].classList.toggle("active", tabs[i].getAttribute("data-view") === view);
+    }
+    ["command", "task", "artifact", "longrun"].forEach(function (v) {
+      var elv = el("view-" + v);
+      if (elv) elv.classList.toggle("hidden", v !== view);
+    });
+    if (view === "task") loadWorkflow();
+    if (view === "artifact") loadArtifacts();
+    if (view === "longrun") loadLongrun();
+  }
+
+  function bindTabs() {
+    var tabs = el("top-tabs");
+    if (tabs) {
+      tabs.addEventListener("click", function (e) {
+        var t = e.target;
+        if (!t || !t.classList || !t.classList.contains("tab")) return;
+        switchView(t.getAttribute("data-view") || "command");
+      });
+    }
+    var roleBtn = el("role-config-btn");
+    if (roleBtn) roleBtn.addEventListener("click", openRoleConfig);
+  }
+
+  // ---------- H2 角色配置入口 ----------
+  function openRoleConfig() {
+    var ids = Object.keys(_agentMap);
+    if (!ids.length) { appendMsg("系统", "Agent 列表尚未加载，无法配置角色", "sys"); return; }
+    var opts = ids.map(function (id) {
+      var a = _agentMap[id];
+      return '<option value="' + id + '">' + (a.name || id) + '（' + (a.role_display || a.role || "?") + '）</option>';
+    }).join("");
+    var overlay = document.createElement("div");
+    overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:200;display:flex;align-items:center;justify-content:center;";
+    var panel = document.createElement("div");
+    panel.style.cssText = "background:var(--bg-panel);border:1px solid var(--border-hover);border-radius:10px;padding:18px;min-width:320px;";
+    panel.innerHTML =
+      '<div style="font-weight:700;margin-bottom:10px;color:var(--mi-orange-light)">配置 Agent 角色</div>' +
+      '<div style="margin-bottom:12px"><select id="rc-sel" style="width:100%;background:var(--bg-input);border:1px solid var(--border-color);color:var(--text-primary);border-radius:7px;padding:7px;outline:none;">' + opts + '</select></div>' +
+      '<div style="display:flex;gap:8px;justify-content:flex-end">' +
+      '<button class="act-btn" id="rc-cancel">取消</button>' +
+      '<button class="act-btn solid" id="rc-ok">打开角色配置</button></div>';
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+    overlay.addEventListener("click", function (e) { if (e.target === overlay) overlay.remove(); });
+    var cancel = el("rc-cancel");
+    if (cancel) cancel.addEventListener("click", function () { overlay.remove(); });
+    var ok = el("rc-ok");
+    if (ok) ok.addEventListener("click", function () {
+      var sel = el("rc-sel");
+      var id = sel ? sel.value : "";
+      overlay.remove();
+      _callPython("openRoleConfigDialog", id, function (res) {
+        appendMsg("系统", res && res.success ? "已请求打开角色配置（Qt 对话框）" : ("角色配置失败：" + ((res && res.error) || "未知")), "sys");
+      });
+    });
+  }
+
+  // ---------- Agent 卡片动态渲染（getAgentsInfo） ----------
+  function loadAgents() {
+    _callPython("getAgentsInfo", "all", function (res) {
+      var c = el("agent-cards");
+      if (!c) return;
+      if (!res || !res.success) {
+        c.innerHTML = '<div class="view-item">Agent 列表加载失败：' + ((res && res.error) || "未知") + '</div>';
+        return;
+      }
+      var list = res.data;
+      if (!Array.isArray(list)) list = [list];
+      _agentMap = {};
+      list.forEach(function (a) { _agentMap[a.id] = a; });
+      renderAgentCards(list);
+      fillTaskAgentSel(list);
+    });
+  }
+
+  function renderAgentCards(list) {
+    var c = el("agent-cards");
+    if (!c) return;
+    if (!list.length) { c.innerHTML = '<div class="view-item">暂无 Agent，点上方「角色配置」添加</div>'; return; }
+    c.innerHTML = list.map(function (a) {
+      var statusCls = a.status || "idle";
+      var pct = Math.max(0, Math.min(100, a.progress || 0));
+      var lead = (a.role === "commander" || a.role === "orchestrator") ? " lead" : "";
+      return (
+        '<div class="agent-card' + lead + '" data-id="' + a.id + '">' +
+          '<div class="a-head">' +
+            '<div class="a-ico">' + (a.icon && !/^</.test(a.icon) ? escapeHtml(a.icon) : (a.icon || ROLE_ICONS[a.role] || ROLE_ICONS["general"])) + '</div>' +
+            '<div><div class="a-name">' + escapeHtml(a.name || a.id) + '</div>' +
+            '<div class="a-role">' + escapeHtml(a.role_display || a.role || "?") + '</div></div>' +
+            '<div class="a-status ' + statusCls + '"><span class="sd"></span><span class="stx">' +
+              escapeHtml(statusCls) + (statusCls === "working" ? " " + pct + "%" : "") + '</span></div>' +
+          '</div>' +
+          '<div class="a-progress"><i style="width:' + pct + '%"></i></div>' +
+          '<div class="a-model">' + escapeHtml((a.ai_engine || "?") + " · " + (a.ai_model || "?")) + '</div>' +
+          '<div class="a-actions">' +
+            '<button class="a-btn" data-act="pause">暂停</button>' +
+            '<button class="a-btn" data-act="config">配置</button>' +
+            '<button class="a-btn" data-act="detail">详情</button>' +
+            '<button class="a-btn" data-act="report">输出</button>' +
+          '</div>' +
+        '</div>'
+      );
+    }).join("");
+  }
+
+  function bindAgentCardActions() {
+    var c = el("agent-cards");
+    if (!c) return;
+    c.addEventListener("click", function (e) {
+      var btn = e.target.closest ? e.target.closest("button[data-act]") : null;
+      if (!btn) return;
+      var card = btn.closest(".agent-card");
+      var id = card ? card.getAttribute("data-id") : "";
+      var act = btn.getAttribute("data-act");
+      if (!id) return;
+      var nm = (_agentMap[id] && _agentMap[id].name) || id;
+      if (act === "pause") {                    // M3 暂停
+        _callPython("pauseWorkflow", function (res) {
+          appendMsg("系统", res && res.success ? "已请求暂停工作流" : ("暂停失败：" + ((res && res.error) || "未知")), "sys");
+        });
+      } else if (act === "config") {            // M2 配置 Agent
+        _callPython("openRoleConfigDialog", id, function (res) {
+          appendMsg("系统", res && res.success ? "已打开「" + nm + "」角色配置" : ("配置失败：" + ((res && res.error) || "未知")), "sys");
+        });
+      } else if (act === "detail") {            // M1 查看任务/详情
+        _callPython("getAgentDetail", id, function (res) {
+          if (!res || !res.success || !res.data) { appendMsg("系统", "详情获取失败", "sys"); return; }
+          var d = res.data;
+          var tasks = (d.tasks && d.tasks.length) ? d.tasks.map(function (t) {
+            return "  [" + (t.status || "?") + "] " + (t.title || "");
+          }).join("\n") : "（无任务）";
+          var txt = "【" + (d.name || id) + "】 " + (d.role_display || d.role || "") +
+            "\n状态: " + d.status + " · 进度 " + d.progress + "%" +
+            "\n引擎: " + (d.ai_engine || "?") + " / " + (d.ai_model || "?") +
+            "\n任务:\n" + tasks +
+            "\n输出: " + (d.output || "（空）");
+          appendMsg(d.name || id, txt, "agent");
+        });
+      } else if (act === "report") {            // M5 查看输出
+        _callPython("getAgentDetail", id, function (res) {
+          var d = res && res.success && res.data;
+          var out = d && d.output ? d.output : "（暂无输出）";
+          appendMsg((d && d.name) || id, "输出▸ " + out, "agent");
+        });
+      }
+    });
+  }
+
+  // ---------- H4 任务分配 / M1 工作流 ----------
+  function fillTaskAgentSel(list) {
+    var sel = el("task-agent-sel");
+    if (!sel) return;
+    sel.innerHTML = list.map(function (a) {
+      return '<option value="' + a.id + '">' + (a.name || a.id) + '</option>';
+    }).join("");
+  }
+
+  function loadWorkflow() {
+    _callPython("getWorkflowStatus", function (res) {
+      var box = el("wf-steps");
+      if (!box) return;
+      if (!res || !res.success || !res.data) {
+        box.innerHTML = '<li><span class="step-ico todo"></span><span class="st-name">工作流获取失败</span></li>';
+        return;
+      }
+      var d = res.data;
+      var steps = d.steps || [];
+      if (!steps.length) { box.innerHTML = '<li><span class="step-ico todo"></span><span class="st-name">暂无工作流步骤</span></li>'; return; }
+      box.innerHTML = steps.map(function (s) {
+        var st = s.status === "done" ? "done" : ((s.status === "active" || s.status === "running") ? "active" : "todo");
+        return '<li class="' + st + '"><span class="step-ico ' + st + '"></span><span class="st-name">' + escapeHtml(s.name || s.id || "?") + '</span></li>';
+      }).join("");
+    });
+  }
+
+  function bindTaskSend() {
+    var btn = el("task-send-btn");
+    if (!btn) return;
+    btn.addEventListener("click", function () {
+      var sel = el("task-agent-sel");
+      var inp = el("task-input");
+      var id = sel ? sel.value : "";
+      var text = inp ? inp.value.trim() : "";
+      if (!id || !text) return;
+      var nm = (_agentMap[id] && _agentMap[id].name) || id;
+      appendMsg("你", "→ 派发给「" + nm + "」: " + text, "user");
+      inp.value = "";
+      var model = el("model-sel") ? el("model-sel").value : "qwen2.5:1.5b";
+      _callPython("agentChatWithEngine", "ollama", model,
+        "你是混合模式中的角色「" + nm + "」。请完成以下任务：\n" + text, function (res) {
+          appendMsg(nm, res && res.success ? (res.reply || "（空回复）") : ("派发失败：" + ((res && res.error) || "未知")), "agent");
+          loadWorkflow();
+        });
+    });
+  }
+
+  // ---------- M5 产物层 ----------
+  function loadArtifacts() {
+    var box = el("artifact-list");
+    if (!box) return;
+    var ids = Object.keys(_agentMap);
+    if (!ids.length) { box.innerHTML = '<div class="view-item">Agent 列表为空</div>'; return; }
+    box.innerHTML = '<div class="view-item">加载产物中…</div>';
+    var done = 0;
+    ids.forEach(function (id) {
+      _callPython("getAgentDetail", id, function (res) {
+        done++;
+        var d = res && res.success && res.data;
+        var nm = (d && d.name) || id;
+        var out = d && d.output ? d.output : "（暂无输出）";
+        var html = '<div class="view-item"><div class="vi-h"><b>' + escapeHtml(nm) + '</b><span style="color:var(--text-muted)">' + escapeHtml((d && d.status) || "?") + '</span></div><pre>' + escapeHtml(out) + '</pre></div>';
+        var placeholder = box.querySelector(".view-item");
+        if (done === 1 && placeholder && /加载产物中/.test(placeholder.textContent)) box.innerHTML = html;
+        else box.insertAdjacentHTML("beforeend", html);
+      });
+    });
+  }
+
+  // ---------- M4 长跑监控 ----------
+  function loadLongrun() {
+    _callPython("getMonitorData", function (res) {
+      var d = res && res.success && res.data;
+      if (!d) return;
+      if (el("lr-total")) el("lr-total").textContent = d.agent_count != null ? d.agent_count : "-";
+      if (el("lr-running")) el("lr-running").textContent = d.running_count != null ? d.running_count : "-";
+      if (el("lr-done")) el("lr-done").textContent = d.completed_count != null ? d.completed_count : "-";
+      var eng = d.engines || {};
+      var online = 0;
+      Object.keys(eng).forEach(function (k) { if (eng[k].status === "online") online++; });
+      if (el("lr-engine")) el("lr-engine").textContent = online;
+      if (el("stat-total")) el("stat-total").textContent = d.agent_count != null ? d.agent_count : el("stat-total").textContent;
+      if (el("stat-running")) el("stat-running").textContent = d.running_count != null ? d.running_count : el("stat-running").textContent;
+      if (el("stat-done")) el("stat-done").textContent = d.completed_count != null ? d.completed_count : el("stat-done").textContent;
+    });
+    _callPython("getOrchestratorStatus", function (res) {
+      var box = el("lr-orch");
+      if (!box) return;
+      box.innerHTML = res && res.success
+        ? "<pre>" + escapeHtml(JSON.stringify(res.data, null, 2)) + "</pre>"
+        : "<span>获取失败：" + ((res && res.error) || "未知") + "</span>";
+    });
+    _callPython("getMultiInstanceStatus", function (res) {
+      var box = el("lr-multi");
+      if (!box) return;
+      box.innerHTML = res && res.success
+        ? "<pre>" + escapeHtml(JSON.stringify(res.data, null, 2)) + "</pre>"
+        : "<span>获取失败：" + ((res && res.error) || "未知") + "</span>";
+    });
+  }
+
+  // ---------- H5 查验模式（前端核对层） ----------
+  function runVerify() {
+    var box = el("verify-list");
+    if (!box) return;
+    box.innerHTML = '<div class="view-item">查验中…</div>';
+    _callPython("getAgentsInfo", "all", function (ra) {
+      _callPython("getWorkflowStatus", function (rw) {
+        var agents = ra && ra.success && Array.isArray(ra.data) ? ra.data : [];
+        var wf = rw && rw.success && rw.data;
+        var rows = [];
+        agents.forEach(function (a) {
+          var st = a.status || "idle";
+          var nm = a.name || a.id;
+          if (st === "working") rows.push({ cls: "warn", txt: "「" + nm + "」正在工作（进度 " + (a.progress || 0) + "%），需关注是否卡住" });
+          else if (st === "failed" || st === "stuck" || st === "stalled") rows.push({ cls: "bad", txt: "「" + nm + "」状态异常（" + st + "）" });
+          else rows.push({ cls: "ok", txt: "「" + nm + "」状态正常（" + st + "）" });
+        });
+        if (wf && wf.steps) {
+          var pending = wf.steps.filter(function (s) { return s.status !== "done"; });
+          if (pending.length) rows.push({ cls: "warn", txt: "工作流还有 " + pending.length + " 步未完成" });
+          else rows.push({ cls: "ok", txt: "工作流全部步骤已完成" });
+        }
+        var doneCnt = agents.filter(function (a) { return a.status === "completed" || a.status === "done"; }).length;
+        rows.push(agents.length ? { cls: doneCnt === agents.length ? "ok" : "warn", txt: "Agent 完成度：" + doneCnt + "/" + agents.length } : { cls: "warn", txt: "无 Agent 数据" });
+        box.innerHTML = rows.map(function (r) {
+          return '<div class="verify-row ' + r.cls + '"><span class="v-mark"></span><span class="v-txt">' + escapeHtml(r.txt) + '</span></div>';
+        }).join("") || '<div class="view-item">查验完成：无异常项</div>';
+      });
+    });
+  }
+
+  function bindVerify() {
+    var btn = el("verify-btn");
+    if (btn) btn.addEventListener("click", runVerify);
+  }
+
+  // ---------- 公司架构跨窗派发 ----------
+  // [已接真后端] 以下 dispatchCrossWindow / renderCrossWindowResult 已接真实混合模式运行时：
+  //   - dispatchCrossWindow(target) 经 _callPython("dispatchCrossWindowTask") 调用
+  //     HybridBridge.dispatchCrossWindowTask → CompanyRuntimeBridge.dispatch_cross_window
+  //   - 三窗(standard/miemie/kiwi)均为真实执行，不再返回"假 status=done"：
+  //       standard → EngineManager.chat 真实处理自然语言任务（落盘 data/standard_summaries/*.summary.md）
+  //       miemie    → miemie.dispatch.dispatch_task 真实派发（落盘 data/miemie_tasks.log）
+  //       kiwi      → VizOrchestrator 单例真实窗口枚举（落盘 data/TASKS.md + data/kiwi_heartbeat.log）
+  //   - 结果区 renderCrossWindowResult 真实展示 reply/file/task_id（非零部件）
+  //   前端重做清单见 data/hybrid_frontend_todo.md
+  function _parseBridge(res) {
+    if (!res) return {};
+    if (typeof res.data === "string") {
+      try { return JSON.parse(res.data) || {}; } catch (e) { return { note: res.data }; }
+    }
+    return res;
+  }
+  function dispatchCrossWindow(target) {
+    var box = el("cw-result");
+    if (box) box.innerHTML = '<div style="color:#9aa">派发中 → ' + target + ' …</div>';
+    var commands = {
+      standard: "读取 README.md 并摘要",
+      miemie: "读取 README.md 并摘要",
+      kiwi: "枚举当前桌面可见窗口并回报数量"
+    };
+    var task = {
+      task_id: "CW" + Date.now(),
+      title: "跨窗演示任务",
+      description: "由混合模式总指挥派发的跨窗任务（目标：" + target + "）",
+      command: commands[target] || "执行一个跨窗协作子任务并回报结果",
+      args: { source: "hybrid_wireframe", target: target }
+    };
+    _callPython("dispatchCrossWindowTask", target, JSON.stringify(task), function (res) {
+      renderCrossWindowResult(target, _parseBridge(res));
+    });
+  }
+  function renderCrossWindowResult(target, obj) {
+    var box = el("cw-result");
+    if (!box) return;
+    var ok = obj && obj.status === "done";
+    var color = ok ? "#5ad17a" : "#ff7a7a";
+    var note = (obj && obj.note) ? obj.note : ((obj && obj.error) ? obj.error : "无返回");
+    var html =
+      '<div><b style="color:' + color + '">' + (ok ? "派发成功" : "派发失败") + '</b> · ' + target + '</div>' +
+      '<div style="color:#9aa">' + escapeHtml(String(note)) + '</div>';
+    if (obj && obj.file) html += '<div style="color:#7af">产物: ' + escapeHtml(String(obj.file)) + '</div>';
+    if (obj && obj.reply) html += '<div style="color:#cde;max-height:120px;overflow:auto">' + escapeHtml(String(obj.reply).slice(0, 400)) + '</div>';
+    if (obj && obj.task_id) html += '<div style="color:#678">task_id: ' + escapeHtml(String(obj.task_id)) + '</div>';
+    box.innerHTML = html;
+  }
+  window.onCrossWindowDispatched = function (target, resultJson) {
+    var obj = {};
+    try { obj = JSON.parse(resultJson) || {}; } catch (e) { obj = { note: String(resultJson) }; }
+    renderCrossWindowResult(target, obj);
+  };
+  function loadCompanyArch() {
+    _callPython("getCompanyArchitecture", function (res) {
+      var box = el("cw-status");
+      if (!box) return;
+      var arch = _parseBridge(res);
+      if (!arch || !arch.targets) { box.textContent = "三窗状态获取失败"; return; }
+      var status = arch.status || {};
+      var names = arch.names || { standard: "标准模式", miemie: "咩咩", kiwi: "几维鸟" };
+      var html = "";
+      (arch.targets || []).forEach(function (t) {
+        var s = status[t] || {};
+        var on = s.online;
+        html += '<span style="display:inline-block;margin:2px 6px 2px 0;padding:2px 8px;border-radius:10px;font-size:11px;' +
+                'background:' + (on ? "#16321f" : "#321616") + ';color:' + (on ? "#5ad17a" : "#ff7a7a") + '">' +
+                (names[t] || t) + ' · ' + (on ? "在线" : "回退") + '</span>';
+      });
+      html += '<div style="color:#678;margin-top:4px">在线 ' + (arch.online_count || 0) + ' / ' + (arch.targets || []).length + '</div>';
+      box.innerHTML = html;
+    });
+  }
+
+  // ---------- v5.P0: 模型下拉动态化 ----------
+  function refreshModelDropdown() {
+    var sel = document.getElementById("model-sel");
+    if (!sel) return;
+    // Hide fallback items initially; show only when real models are not available
+    var fallbackItems = sel.querySelectorAll("option[data-fallback]");
+    for (var i = 0; i < fallbackItems.length; i++) {
+      fallbackItems[i].style.display = "none";
+    }
+    _callPython("getOllamaModels", function(res) {
+      if (res && res.success && res.models && res.models.length > 0) {
+        // Clear and populate with real models
+        sel.innerHTML = "";
+        for (var i = 0; i < res.models.length; i++) {
+          var opt = document.createElement("option");
+          opt.value = res.models[i];
+          opt.textContent = res.models[i];
+          // Select qwen3.5:9b as default if present
+          if (res.models[i].indexOf("qwen3.5") >= 0 && res.models[i].indexOf("9b") >= 0) {
+            opt.selected = true;
+          }
+          sel.appendChild(opt);
+        }
+      } else {
+        // Fallback: show hardcoded options, log warning
+        if (res && res.error) {
+          console.warn("[v5.P0] getOllamaModels failed (" + res.error + "), falling back to hardcoded list");
+        }
+        for (var i = 0; i < fallbackItems.length; i++) {
+          fallbackItems[i].style.display = "";
+        }
+      }
+    });
+  }
+
+  // ---------- 初始化 ----------
+  function init() {
+    var inp = el("agent-input");
+    if (inp) {
+      inp.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendAgent(); }
+      });
+    }
+    var send = el("send-btn");
+    if (send) send.addEventListener("click", sendAgent);
+    var disp = el("dispatch-btn");
+    if (disp) disp.addEventListener("click", function () {
+      appendMsg("你", "（已派发给总指挥）", "user");
+      _callPython("agentChatWithEngine", "ollama", "qwen2.5:1.5b",
+        "根据当前计划书，按 DoD 派发任务给各职能 Agent。", function (res) {
+          if (res && res.success) appendMsg("总指挥", res.reply || "（空回复）", "agent");
+          else appendMsg("系统", "派发失败：" + ((res && res.error) || "未知"), "sys");
+        });
+    });
+    bindModeSwitch();
+    // [v4.5] 混合模式数据驱动面板
+    bindTabs();
+    bindShapeSwitch();
+    //  v5.P1a: 公司视图 — 花名牌渲染
+    bindCompanyView();
+    // v5.P1b: Tab
+    bindBottomTabs();
+    bindAgentCardActions();
+    bindTaskSend();
+    bindVerify();
+
+    // 自检桥接 + AI 状态
+    _callPython("checkBridge", function (r) {
+      var boot = el("boot-msg");
+      if (boot) {
+        boot.textContent = (r && r.success)
+          ? "桥接正常（" + (r.status || "ok") + "），混合模式就绪。"
+          : "桥接异常，部分功能不可用。";
+      }
+      _callPython("checkAllAIStatus", function (res) { updateAIStatus(res); });
+    });
+    //  v5.P0: 动态填充模型下拉
+    refreshModelDropdown();
+
+    // [v4.5] 首屏拉取真实数据
+    loadAgents();
+    loadWorkflow();
+    loadLongrun();
+    loadCompanyArch();   //  公司架构三窗状态
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();
+
+//  v5.P1a: 角色 SVG 图标（10 席）
+var ROLE_ICONS = {"director": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 16.8 5.8 21.3l2.4-7.4L2 9.4h7.6z\"/></svg>", "build": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z\"/></svg>", "plan": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M9 11l3 3L22 4\"/><path d=\"M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11\"/></svg>", "compose": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7\"/><path d=\"M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z\"/></svg>", "general": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"2\" y=\"7\" width=\"20\" height=\"14\" rx=\"2\" ry=\"2\"/><path d=\"M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16\"/></svg>", "review": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/></svg>", "test": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z\" stroke=\"none\"/><path d=\"M2 20h20\"/><path d=\"M2 12h20\"/></svg>", "docs": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z\"/><polyline points=\"14,2 14,8 20,8\"/><line x1=\"16\" y1=\"13\" x2=\"8\" y2=\"13\"/><line x1=\"16\" y1=\"17\" x2=\"8\" y2=\"17\"/></svg>", "devops": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"3\"/><path d=\"M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z\"/></svg>"};
+var ROLE_NAMES = {"director": "总指挥", "build": "构建者", "plan": "规划师", "compose": "编辑者", "general": "执行者", "review": "审查员", "test": "测试工程师", "docs": "文档撰写员", "devops": "运维工程师"};
+var _currentShape = "workbench";
+var _currentFormation = "1+2";
+var _rosterCache = null;
+
+// ---------- 双形态切换 ----------
+function bindShapeSwitch() {
+  var switcher = document.getElementById("topbar-mode");
+  var tabs = document.getElementById("top-tabs");
+  if (switcher) {
+    var items = switcher.querySelectorAll(".mm");
+    for (var i = 0; i < items.length; i++) {
+      items[i].addEventListener("click", function() {
+        for (var j = 0; j < items.length; j++) items[j].classList.remove("active");
+        this.classList.add("active");
+        _currentShape = this.getAttribute("data-shape");
+        if (_currentShape === "company") {
+          document.getElementById("view-company").classList.add("active");
+          if (tabs) tabs.style.display = "none";
+          // 引擎灯 / 模式切换也隐藏
+          var ms = document.getElementById("mode-switch");
+          if (ms) ms.style.display = "none";
+          var rc = document.getElementById("role-config-btn");
+          if (rc) rc.style.display = "none";
+          // 隐藏三栏容器
+          var ws = document.querySelector(".workspace");
+          if (ws) ws.style.display = "none";
+          // 加载花名册
+          refreshCompanyView();
+        } else {
+          document.getElementById("view-company").classList.remove("active");
+          if (tabs) tabs.style.display = "";
+          var ms = document.getElementById("mode-switch");
+          if (ms) ms.style.display = "";
+          var rc = document.getElementById("role-config-btn");
+          if (rc) rc.style.display = "";
+          var ws = document.querySelector(".workspace");
+          if (ws) ws.style.display = "";
+        }
+      });
+    }
+  }
+}
+
+// ---------- 公司视图：花名册渲染 ----------
+function bindCompanyView() {
+  var fSwitch = document.getElementById("formation-switch");
+  if (fSwitch) {
+    var fmtItems = fSwitch.querySelectorAll(".fs");
+    for (var i = 0; i < fmtItems.length; i++) {
+      fmtItems[i].addEventListener("click", function() {
+        for (var j = 0; j < fmtItems.length; j++) fmtItems[j].classList.remove("active");
+        this.classList.add("active");
+        _currentFormation = this.getAttribute("data-fmt");
+        renderEmployeeGrid(_rosterCache);
+      });
+    }
+  }
+  // 初始加载一次花名册
+  _callPython("getAgentRoster", function(res) {
+    if (res && res.roster) {
+      _rosterCache = res.roster;
+      renderEmployeeGrid(res.roster);
+    }
+  });
+}
+
+function refreshCompanyView() {
+  if (_rosterCache) {
+    renderEmployeeGrid(_rosterCache);
+  } else {
+    _callPython("getAgentRoster", function(res) {
+      if (res && res.roster) {
+        _rosterCache = res.roster;
+        renderEmployeeGrid(res.roster);
+      }
+    });
+  }
+}
+
+function renderEmployeeGrid(roster) {
+  var ceoSlot = document.getElementById("ceo-slot");
+  var grid = document.getElementById("employee-grid");
+  if (!ceoSlot || !grid || !roster) return;
+
+  var limits = { "1+2": 3, "1+5": 6, "full": 9 };
+  var maxCount = limits[_currentFormation] || 9;
+  var count = 0;
+
+  // Render CEO (first director/lead agent)
+  var ceoIdx = -1;
+  for (var i = 0; i < roster.length; i++) {
+    if (roster[i].role === "director" || ceoIdx === -1) { ceoIdx = i; break; }
+  }
+  if (ceoIdx >= 0) {
+    var ceo = roster[ceoIdx];
+    var statusMap = { "running": "running", "busy": "busy", "offline": "offline" };
+    var statusClass = statusMap[ceo.state] || "offline";
+    var statusText = { "running": "运行中", "busy": "忙碌", "offline": "离线" }[ceo.state] || "离线";
+    ceoSlot.innerHTML =
+      '<div class="ceo-card">' +
+        '<div class="ceo-ico">' + (ROLE_ICONS[ceo.role] || "") + '</div>' +
+        '<div class="ceo-info">' +
+          '<div class="ceo-name">' + escapeHtml(ceo.name) + '</div>' +
+          '<div class="ceo-role">' + escapeHtml(ceo.role) + ' · 端口 ' + ceo.port + '</div>' +
+          '<div class="ceo-status"><span class="emp-status ' + statusClass + '"></span>' + statusText + '</div>' +
+        '</div>' +
+        '<div class="ceo-actions">' +
+          '<button class="emp-btn" onclick="sendChat('' + ceo.id + '')">对话</button>' +
+          '<button class="emp-btn" onclick="sendDispatch('' + ceo.id + '')">派发</button>' +
+          '<button class="emp-btn" onclick="showAgentDetail('' + ceo.id + '')">详情</button>' +
+          '<button class="emp-btn" onclick="configAgent('' + ceo.id + '')">配置</button>' +
+        '</div>' +
+      '</div>';
+    count = 1;
+  }
+
+  // Render employee grid
+  grid.innerHTML = "";
+  for (var i = 0; i < roster.length && count < maxCount; i++) {
+    if (i === ceoIdx) continue;
+    var emp = roster[i];
+    var isOffline = emp.state === "offline";
+    var statusClass = (emp.state === "running") ? "running" : (emp.state === "busy" ? "busy" : "offline");
+    var roleIcon = ROLE_ICONS[emp.role] || "";
+    var roleName = ROLE_NAMES[emp.role] || emp.role;
+
+    var cardCls = "emp-card" + (isOffline ? " offside" : "");
+    var card = document.createElement("div");
+    card.className = cardCls;
+    if (isOffline) {
+      card.innerHTML =
+        '<div class="emp-hire" onclick="hireSlot('' + emp.role + '')">' +
+          '<div class="emp-ico">' + roleIcon + '</div>' +
+          '<div>' + escapeHtml(roleName) + '</div>' +
+          '<div style="opacity:.7;font-size:10px">点击入职</div>' +
+        '</div>';
+    } else {
+      var successPct = (emp.success_rate * 100).toFixed(0);
+      card.innerHTML =
+        '<div class="emp-head">' +
+          '<div class="emp-ico">' + roleIcon + '</div>' +
+          '<div><div class="emp-name">' + escapeHtml(emp.name) + '</div>' +
+          '<div class="emp-role">' + roleName + ' · ' + emp.port + '</div></div>' +
+        '</div>' +
+        '<span class="emp-status ' + statusClass + '"></span>' +
+        '<span class="emp-success">成功率 ' + successPct + '%</span>' +
+        '<div class="emp-meta">' +
+          '<div>任务完成: <span>' + (emp.tasks_done || 0) + '</span></div>' +
+          (emp.current_task ? '<div class="emp-tasks"><span class="et">' + escapeHtml(emp.current_task) + '</span></div>' : '') +
+        '</div>' +
+        '<div class="emp-actions">' +
+          '<button class="emp-btn" onclick="sendChat('' + emp.id + '')">对话</button>' +
+          '<button class="emp-btn" onclick="sendDispatch('' + emp.id + '')">派发</button>' +
+          '<button class="emp-btn" onclick="showAgentDetail('' + emp.id + '')">详情</button>' +
+          '<button class="emp-btn" onclick="configAgent('' + emp.id + '')">配置</button>' +
+        '</div>';
+    }
+    grid.appendChild(card);
+    count++;
+  }
+}
+
+function sendChat(agentId) {
+  appendMsg("你", "（与 " + agentId + " 打开对话）", "user");
+  _callPython("agentChatWithEngine", agentId, null, null, function(res) {
+    if (res && res.success) appendMsg("员工", res.reply || "（空回复）", "agent");
+    else appendMsg("系统", "对话失败：" + ((res && res.error) || "未知"), "sys");
+  });
+}
+function sendDispatch(agentId) {
+  var task = prompt("向 " + agentId + " 派发什么任务？");
+  if (!task) return;
+  appendMsg("你", "（已派发至 " + agentId + "）", "user");
+  _callPython("assignTask", agentId, task, "", function(res) {
+    appendMsg("系统", res && res.success ? "派发成功" : "派发失败：" + ((res && res.error) || "未知"), "sys");
+  });
+}
+function showAgentDetail(agentId) { appendMsg("系统", "员工详情: " + agentId, "sys"); }
+function configAgent(agentId) { appendMsg("系统", "员工配置: " + agentId, "sys"); }
+function hireSlot(roleKey) {
+  _callPython("hireAgent", roleKey, "qwen3.5:9b", function(res) {
+    appendMsg("系统", res && res.success ? roleKey + " 已入职" : "入职失败：" + ((res && res.error) || "未知"), "sys");
+    // Reload roster after hire
+    _callPython("getAgentRoster", function(r2) {
+      if (r2 && r2.roster) { _rosterCache = r2.roster; renderEmployeeGrid(r2.roster); }
+    });
+  });
+}
+
+
+// v5.P1b: 
+function bindBottomTabs() {
+  var tabs = document.querySelectorAll(".bottom-tab[data-panel]");
+  for (var i = 0; i < tabs.length; i++) {
+    tabs[i].addEventListener("click", function() {
+      var panelId = this.getAttribute("data-panel");
+      if (!panelId) return;
+      var allTabs = document.querySelectorAll(".bottom-tab");
+      for (var j = 0; j < allTabs.length; j++) allTabs[j].classList.remove("active");
+      var allPanels = document.querySelectorAll(".bottom-panel");
+      for (var j = 0; j < allPanels.length; j++) allPanels[j].classList.remove("active");
+      this.classList.add("active");
+      var panel = document.getElementById(panelId);
+      if (panel) panel.classList.add("active");
+      if (panelId === "bp-agent") refreshAgentCtrlList();
+    });
+  }
+  var gotoStd = document.getElementById("bp-goto-standard");
+  if (gotoStd) {
+    gotoStd.addEventListener("click", function() {
+      _callPython("switchMode", "standard", function(r) {
+        appendBpMsg("bp-agent-msgs","系统","已切换（请用主窗底部终端面板）","sys",now());
+      });
+    });
+  }
+  var sendBtn = document.getElementById("bp-agent-send");
+  var sendInput = document.getElementById("bp-agent-input");
+  if (sendBtn && sendInput) {
+    function _send() {
+      var agentId = _currentAgentId || "director";
+      var msg = sendInput.value.trim();
+      if (!msg) return;
+      appendBpMsg("bp-agent-msgs","你",msg,"user",now());
+      sendInput.value="";
+      _callPython("agentChatWithEngine", agentId, null, msg, function(res){
+        appendBpMsg("bp-agent-msgs", agentId, (res&&res.reply)||"(空)","agent",now());
+      });
+    }
+    sendBtn.addEventListener("click", _send);
+    sendInput.addEventListener("keydown", function(e){
+      if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();_send();}
+    });
+  }
+  var saveBtn = document.getElementById("bp-save-md");
+  if (saveBtn) saveBtn.addEventListener("click", function(){
+    saveAsMarkdown((document.getElementById("bp-chatlog-msgs")||{}).innerText||"");
+  });
+  var clrBtn = document.getElementById("bp-clear-msgs");
+  if (clrBtn) clrBtn.addEventListener("click", function(){
+    var a=document.getElementById("bp-chatlog-msgs"); if(a){a.innerHTML="";}
+  });
+}
+var _currentAgentId=null;
+function refreshAgentCtrlList(){
+  var list=document.getElementById("bp-agent-list");
+  if(!list)return;
+  _callPython("getAgentRoster",function(res){
+    if(!res||!res.roster){list.innerHTML="<div class=view-item>加载中…</div>";return;}
+    var h="";
+    for(var i=0;i<res.roster.length;i++){
+      var e=res.roster[i];
+      h+='<div class=bp-list-item data-agent-id='+e.id+'>'+
+        (ROLE_ICONS[e.role]||'')+escapeHtml(e.name)+'</div>';
+    }
+    list.innerHTML=h;
+    var items=list.querySelectorAll(".bp-list-item");
+    for(var i=0;i<items.length;i++)(function(items){
+      items[i].addEventListener("click",function(){
+        _currentAgentId=this.getAttribute("data-agent-id");
+        for(var j=0;j<items.length;j++)items[j].classList.remove("selected");
+        this.classList.add("selected");
+      });
+    })(items);
+  });
+}
+function appendBpMsg(areaId,who,text,kind,ts){
+  var a=document.getElementById(areaId);if(!a)return;
+  var d=document.createElement("div");
+  d.className="bp-msg"+(kind==="sys"?" sys":"")+(kind==="thinking"?" thinking":"");
+  d.innerHTML='<span class=who style=color:'+(kind==="user"?"var(--info)":kind==="sys"?"var(--warning)":"var(--brand-light)")+'>'+escapeHtml(who)+'</span>'+
+    '<span class=ts>'+(ts||"")+'</span><br>'+escapeHtml(text);
+  a.appendChild(d);a.scrollTop=a.scrollHeight;
+}
+function saveAsMarkdown(text){
+  try{
+    var blob=new Blob([text||""],{type:"text/markdown"});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement("a");a.href=url;
+    a.download="chatlog_"+new Date().toISOString().slice(0,10)+".md";
+    a.click();URL.revokeObjectURL(url);
+  }catch(e){appendBpMsg("bp-agent-msgs","系统","导出失败: "+e,"sys",now());}
+}
+
+// v5.P2: 策划书 → 计划预览 → 拍板 → 派发
+var _currentPlanTasks = [];
+var _currentRunId = 0;
+
+function submitPlan(){
+  var input = document.getElementById("agent-input");
+  var desc = input ? input.value.trim() : "";
+  if(!desc){
+    appendMsg("系统","请先输入策划书描述…","sys");
+    return;
+  }
+  appendMsg("你","（提交策划书进行结构化分解）","user");
+  if(input) input.value = "";
+  // call bridge
+  _callPython("commanderPlan", desc, function(res){
+    if(res && res.success && res.tasks && res.tasks.length > 0){
+      _currentPlanTasks = res.tasks;
+      showPlanPreview(res.tasks);
+    }else{
+      appendMsg("系统","策划书分解失败: "+((res&&res.error)||"未知"),"sys");
+    }
+  });
+}
+
+function showPlanPreview(tasks){
+  var card = document.getElementById("plan-preview-card");
+  var container = document.getElementById("pp-tasks");
+  var countEl = document.getElementById("pp-count");
+  if(!card||!container)return;
+  container.innerHTML = "";
+  if(countEl) countEl.textContent = "("+tasks.length+"个任务)";
+  for(var i=0;i<tasks.length;i++){
+    var t = tasks[i];
+    var roleIcon = ROLE_ICONS[t.target_role] || "";
+    var div = document.createElement("div");
+    div.className = "pp-task";
+    div.innerHTML =
+      '<div class="pp-role-ico">'+roleIcon+'</div>'+
+      '<div class="pp-task-body">'+
+        '<div class="pp-task-title"><span class="pp-role-tag">'+escapeHtml(t.target_role)+'</span> '+escapeHtml(t.task)+'</div>'+
+        '<div class="pp-task-dod">DoD: '+escapeHtml(t.dod)+'</div>'+
+      '</div>';
+    container.appendChild(div);
+  }
+  card.classList.add("active");
+}
+
+function hidePlanPreview(){
+  var card = document.getElementById("plan-preview-card");
+  if(card) card.classList.remove("active");
+  _currentPlanTasks = [];
+}
+
+function approveAndDispatch(){
+  if(!_currentPlanTasks.length){
+    appendMsg("系统","没有可派发的任务","sys");
+    return;
+  }
+  _currentRunId++;
+  var runId = "run"+String(_currentRunId).padStart(3,'0');
+  var results = [];
+  appendMsg("系统","开始派发 "+runId+"（"+_currentPlanTasks.length+"个任务）","sys");
+  
+  // Sequential dispatch
+  var idx = 0;
+  function dispatchNext(){
+    if(idx >= _currentPlanTasks.length){
+      // All dispatched
+      appendMsg("系统",runId+" 全部派发完成，共 "+results.length+" 个成功","sys");
+      saveRunFile(runId, _currentPlanTasks, results);
+      hidePlanPreview();
+      return;
+    }
+    var t = _currentPlanTasks[idx];
+    idx++;
+    _callPython("assignTask", t.target_role, t.task, t.dod, function(res){
+      results.push({target_role:t.target_role, task:t.task, success: !!(res&&res.success), error: res&&res.error});
+      appendMsg("系统","→ "+t.target_role+": "+((res&&res.success)?"已派发":"失败 "+((res&&res.error)||"")),"sys");
+      dispatchNext();
+    });
+  }
+  dispatchNext();
+}
+
+function saveRunFile(runId, tasks, results){
+  var runData = {
+    run_id: runId,
+    timestamp: new Date().toISOString(),
+    tasks: tasks,
+    results: results,
+    success_count: results.filter(r=>r.success).length,
+    fail_count: results.filter(r=>!r.success).length
+  };
+  _callPython("saveRunData", JSON.stringify(runData), function(res){
+    appendMsg("系统","run 记录已保存: "+runId, "sys");
+  });
+}
+
+// Events
+document.addEventListener("DOMContentLoaded", function(){
+  var approveBtn = document.getElementById("pp-approve");
+  var cancelBtn = document.getElementById("pp-cancel");
+  if(approveBtn) approveBtn.addEventListener("click", approveAndDispatch);
+  if(cancelBtn) cancelBtn.addEventListener("click", hidePlanPreview);
+  // Also handle send-btn: if input looks like a plan (>50 chars), do plan decomposition
+  var sendBtn = document.getElementById("send-btn");
+  if(sendBtn){
+    sendBtn.addEventListener("click", function(){
+      var input = document.getElementById("agent-input");
+      var val = input ? input.value.trim() : "";
+      if(val.length > 50){
+        // Treat as plan
+        submitPlan();
+      } else {
+        sendAgent();
+      }
+    });
+  }
+});
+
+// v5.P3: 启动公司
+var _currentFormation = "1+5";
+function initStartup(){
+  var btn = document.getElementById("start-company-btn");
+  var fmtBtn = document.getElementById("formation-pick-btn");
+  var rhBtn = document.getElementById("run-history-btn");
+  var rhDrop = document.getElementById("run-history-dropdown");
+  
+  if(btn){
+    btn.addEventListener("click", function(){
+      this.disabled = true;
+      this.textContent = "启动中…";
+      appendStartupLog("info","正在按编制 "+_currentFormation+" 启动公司…");
+      _callPython("startCompany", _currentFormation, function(res){
+        var startBtn = document.getElementById("start-company-btn");
+        if(startBtn){startBtn.disabled = false; startBtn.textContent = "启动公司";}
+        if(res && res.success){
+          appendStartupLog("ok","成功: "+res.started+"/"+res.total+" 席位已启动");
+          for(var i=0;i<res.results.length;i++){
+            var r = res.results[i];
+            appendStartupLog(r.status==="failed"?"fail":"ok",
+              "  "+r.role+": "+r.status+(r.port?" (端口"+r.port+")":""));
+          }
+          // Refresh company view roster
+          if(typeof refreshCompanyView === "function") refreshCompanyView();
+        }else{
+          appendStartupLog("fail","启动失败: "+((res&&res.error)||"未知"));
+        }
+      });
+    });
+  }
+  // Formation picker
+  var fmts = ["1+2","1+5","full"];
+  if(fmtBtn){
+    fmtBtn.addEventListener("click", function(){
+      var idx = fmts.indexOf(_currentFormation);
+      _currentFormation = fmts[(idx+1)%fmts.length];
+      var labels = {"1+2":"精简 1+2","1+5":"标准 1+5","full":"满编 9"};
+      this.textContent = "编制: "+labels[_currentFormation];
+      appendStartupLog("info","编制切换为 "+_currentFormation);
+    });
+  }
+  // Run history toggle
+  if(rhBtn && rhDrop){
+    rhBtn.addEventListener("click", function(e){
+      e.stopPropagation();
+      if(rhDrop.classList.contains("active")){
+        rhDrop.classList.remove("active");
+      }else{
+        _callPython("getRunHistory", function(res){
+          if(res && res.runs && res.runs.length > 0){
+            var html = "";
+            for(var i=res.runs.length-1;i>=0;i--){
+              var r = res.runs[i];
+              html += '<div class="rh-item" onclick="alert(''+r.run_id+': '+r.success_count+'/'+r.task_count+' ok')">'+
+                r.run_id+' <span style="color:var(--text-muted)">('+r.timestamp+')</span></div>';
+            }
+            rhDrop.innerHTML = html;
+          }else{
+            rhDrop.innerHTML = '<div style="padding:8px;color:var(--text-muted);font-size:11px">暂无 run 记录</div>';
+          }
+          rhDrop.classList.add("active");
+          // Close on outside click
+          setTimeout(function(){
+            document.addEventListener("click", function closeRh(e){
+              if(!rhDrop.contains(e.target) && e.target !== rhBtn){
+                rhDrop.classList.remove("active");
+                document.removeEventListener("click", closeRh);
+              }
+            });
+          }, 100);
+        });
+      }
+    });
+  }
+}
+
+function appendStartupLog(level, text){
+  var log = document.getElementById("startup-log");
+  if(!log){  // create log area if not exists
+    var bar = document.getElementById("startup-bar");
+    if(bar){
+      var div = document.createElement("div");
+      div.id = "startup-log";
+      div.className = "startup-log";
+      bar.parentNode.insertBefore(div, bar.nextSibling);
+      log = div;
+    }
+  }
+  if(log){
+    var lines = log.querySelectorAll(".sl-item");
+    if(lines.length > 30) lines[0].remove();
+    var div = document.createElement("div");
+    div.className = "sl-item sl-"+level;
+    div.textContent = text;
+    log.appendChild(div);
+    log.scrollTop = log.scrollHeight;
+  }
+}
+
+// Initialize on DOMContentLoaded
+document.addEventListener("DOMContentLoaded", initStartup);
+
+// v5.37.T2: Live artifact indexing from data/
+function refreshArtifacts(){
+  _callPython("getArtifacts", function(res){
+    var list = document.getElementById("artifact-list");
+    if(!list) return;
+    if(res && res.artifacts && res.artifacts.length > 0){
+      var html = "";
+      for(var i=0;i<Math.min(res.artifacts.length,30);i++){
+        var a = res.artifacts[i];
+        var sz = a.size > 1024 ? Math.round(a.size/1024)+"KB" : a.size+"B";
+        html += '<div class="view-item">['+a.category+"] "+a.name+" ("+sz+")</div>";
+      }
+      list.innerHTML = html;
+    } else {
+      list.innerHTML = '<div class="view-item">暂无产物文件</div>';
+    }
+  });
+}
+
+document.addEventListener("DOMContentLoaded", function(){
+  refreshArtifacts();
+});
+</script>
+</body>
+</html>
+

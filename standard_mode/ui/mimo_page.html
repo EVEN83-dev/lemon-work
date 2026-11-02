@@ -1,0 +1,2573 @@
+<!DOCTYPE html>
+<!--
+  ★ v4.7.15-DEPLOYED 2026-08-06 ★
+  顶栏合并 + 状态栏分区 + 终端子工具栏
+ 搜索框 / 积分 / 面板 / 主题 / 辅助 / 账户 + 性能 FPS/GPU/CPU/MEM/NATIVE/HOST
+  如果页面没看到顶部 TopBar 13 项 + 底部子工具栏，说明跑的是 bin/mimo.exe（旧版本）
+   请用 standard_mode/run.bat 跑 Python 源码
+  ★ 如果看到紫色的 "v4.7.15 · TOPBAR+FPS" 浮标，就说明新 HTML 已加载 ★
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>Lemon Code Agent</title>
+<!-- ★ 预连接到 KaTeX CDN，加速资源加载 -->
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<!-- KaTeX 数学公式渲染（非阻塞加载，避免影响首屏渲染） -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"></noscript>
+<!-- ★ v4.2.4: Three.js（咩咩粒子咩咩 3D Points 系统，本地依赖） -->
+<script src="libs/three/three.min.js"></script>
+<!-- ★ v4.6.2: QWebChannel 桥接（pybridge 主通道，本地依赖；纯浏览器调试时无 qt 环境自动回退 _callPython） -->
+<script src="qwebchannel.js"></script>
+<!-- ★ 卡顿修复: KaTeX JS 从 CDN 改为按需加载（renderMathInContainer 已有 CSS fallback），避免 CDN 慢阻塞 -->
+<script defer src="libs/marked/marked.min.js"></script>
+<!-- ★ 卡顿修复: 移除 highlight.js/chart.js/pdfjs/xlsx/mammoth 等 CDN 可选库
+     这些库在 CDN 慢时(实测 26.9s/个)导致 WebEngine 周期性阻塞事件循环。
+     代码中均有 if(window.xxx) fallback，移除后自动降级纯文本，不影响核心功能。 -->
+<link rel="stylesheet" href="mimo_style.css?v=4.9.0-lemongaze-20260910">
+<script src="svg_icons.js"></script>
+<script src="mimo_core.js"></script>
+<!-- ★ v4.7.17+: 关键 CSS inline 到 head，防止 FOUC（link 在 body 内导致的样式错位闪烁） -->
+<style>
+/* 基础布局（保证即使外链 CSS 未加载也不错位） */
+html, body, #content { margin:0; padding:0; height:100%; overflow:hidden; }
+#content { display:flex; flex-direction:column; position:relative; }
+.workspace-area { flex:1 1 0; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
+.output-area { flex:1 1 0; min-height:0; overflow-y:auto; }
+.input-area { flex:0 0 auto; padding:10px 14px 12px; background:rgba(10,10,14,0.96); pointer-events:auto; }
+.input-box { display:flex; flex-direction:column; gap:8px; background:rgba(12,12,16,0.96); pointer-events:auto;
+  border:1px solid rgba(255,255,255,0.12); border-radius:16px; padding:10px 10px 10px 14px;
+  box-shadow:0 8px 32px rgba(0,0,0,0.55); min-height:76px; }
+.input-row { display:flex; align-items:flex-end; gap:8px; width:100%; }
+.input-row > textarea { flex:1 1 auto; min-width:0; background:transparent; border:none;
+  color:#f5f5f5; font-size:14px; padding:10px 0; outline:none; line-height:1.5;
+  resize:vertical; min-height:44px; max-height:200px; word-break:break-word; white-space:pre-wrap; }
+/* ★ v4.7.17+ 第二行工具栏（小助手模型选择 + 发送键） */
+.input-toolbar-row { display:flex; align-items:center; justify-content:space-between;
+  gap:8px; width:100%; padding:0 2px; }
+.input-toolbar-row > .engine-chip { flex:0 0 auto; display:inline-flex; align-items:center; gap:6px;
+  background:linear-gradient(90deg,rgba(12,12,16,0.98),rgba(255,105,0,0.08));
+  border:1px solid rgba(255,105,0,0.45); border-radius:10px; padding:4px 10px;
+  font-size:11px; color:rgba(255,255,255,0.9); min-height:36px; cursor:pointer;
+  position:relative;
+}
+.input-toolbar-row > .engine-chip .model-select-panel {
+  bottom:100%; left:0; right:auto;
+  margin-bottom:6px;
+}
+.engine-chip { cursor: pointer; }
+.input-toolbar-row > .spacer { flex:1 1 auto; }
+.input-toolbar-row > .send-btn { flex:0 0 auto; width:60px; height:36px; min-width:60px; min-height:36px;
+  background:linear-gradient(180deg,#ff9a4a 0%,#ff6900 55%,#e55a00 100%); color:#000;
+  border:none; border-radius:8px; padding:0; font-size:13px; font-weight:900;
+  cursor:pointer; box-shadow:0 2px 12px rgba(255,105,0,0.35); font-family:'Courier New',monospace; }
+.hidden { display:none !important; }
+.workspace-area { flex:1 1 0; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
+.workspace-tab-bar { display:flex; align-items:center; gap:0; background:rgba(10,10,14,0.96); border-bottom:1px solid rgba(255,255,255,0.08); min-height:32px; overflow-x:auto; flex-shrink:0; }
+.workspace-tab { display:inline-flex; align-items:center; gap:5px; padding:5px 14px; font-size:11px; color:rgba(255,255,255,0.5); background:transparent; border:none; border-right:1px solid rgba(255,255,255,0.04); cursor:pointer; white-space:nowrap; }
+.workspace-tab:hover { color:rgba(255,255,255,0.8); background:rgba(255,255,255,0.04); }
+.workspace-tab.active { color:#ff9a4a; background:rgba(255,105,0,0.08); border-bottom:2px solid #ff6900; }
+.workspace-tab .tab-close { margin-left:6px; font-size:10px; opacity:0.4; cursor:pointer; }
+.workspace-tab .tab-close:hover { opacity:1; color:#ff4444; }
+.workspace-views { flex:1 1 0; min-height:0; position:relative; overflow:hidden; }
+.workspace-view { position:absolute; top:0; left:0; width:100%; height:100%; }
+.workspace-view.active { position:relative; width:100%; height:100%; flex:1 1 0; min-height:0; display:flex; flex-direction:column; }
+.code-viewer { background:#1e1e1e; }
+.doc-viewer { background:#1a1a2e; color:rgba(255,255,255,0.85); padding:16px; }
+.image-viewer { background:#111; }
+.image-viewer img { max-width:100%; max-height:100%; object-fit:contain; }
+.file-explorer-sidebar { position:fixed; left:0; top:40px; bottom:0; width:220px; background:rgba(10,10,14,0.98); border-right:1px solid rgba(255,255,255,0.08); z-index:1000; display:flex; flex-direction:column; }
+.file-explorer-header { display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border-bottom:1px solid rgba(255,255,255,0.06); }
+.file-explorer-title { display:flex; align-items:center; gap:6px; font-size:11px; color:rgba(255,255,255,0.7); font-weight:600; text-transform:uppercase; letter-spacing:0.5px; }
+.file-explorer-actions { display:flex; gap:4px; }
+.file-explorer-btn { background:none; border:none; color:rgba(255,255,255,0.5); cursor:pointer; font-size:12px; padding:2px 6px; border-radius:4px; }
+.file-explorer-btn:hover { color:rgba(255,255,255,0.9); background:rgba(255,255,255,0.06); }
+.file-explorer-path { padding:4px 10px; font-size:10px; color:rgba(255,255,255,0.35); font-family:Consolas,monospace; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; border-bottom:1px solid rgba(255,255,255,0.04); }
+.file-explorer-body { flex:1; overflow-y:auto; padding:4px 0; }
+.file-explorer-empty { padding:20px 12px; text-align:center; color:rgba(255,255,255,0.3); font-size:11px; }
+.file-explorer-item { display:flex; align-items:center; gap:6px; padding:3px 10px; cursor:pointer; font-size:11px; color:rgba(255,255,255,0.6); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.file-explorer-item:hover { background:rgba(255,255,255,0.04); color:rgba(255,255,255,0.9); }
+.file-explorer-item.folder { color:rgba(255,193,7,0.8); }
+.file-explorer-item .fe-icon { flex-shrink:0; width:14px; text-align:center; }
+.file-explorer-toggle-btn { position:fixed; left:4px; top:50%; transform:translateY(-50%); z-index:999; background:rgba(10,10,14,0.9); border:1px solid rgba(255,255,255,0.1); border-radius:6px; padding:6px 4px; cursor:pointer; color:rgba(255,255,255,0.5); }
+.file-explorer-toggle-btn:hover { color:#ff9a4a; border-color:rgba(255,105,0,0.3); }
+.style-toolbar { position:absolute; z-index:10000; display:flex; align-items:center; gap:2px; padding:3px 6px; background:rgba(20,20,28,0.96); border:1px solid rgba(255,255,255,0.12); border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.5); }
+.st-btn { background:none; border:1px solid transparent; color:rgba(255,255,255,0.7); cursor:pointer; font-size:12px; padding:4px 7px; border-radius:4px; min-width:24px; text-align:center; }
+.st-btn:hover { background:rgba(255,105,0,0.1); color:#ff9a4a; border-color:rgba(255,105,0,0.2); }
+.st-sep { width:1px; height:16px; background:rgba(255,255,255,0.1); margin:0 2px; }
+.st-font-select { background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); color:rgba(255,255,255,0.6); font-size:10px; padding:2px 4px; border-radius:4px; cursor:pointer; }
+
+
+</style>
+</head>
+<body>
+
+<!-- ★ v4.1.29: 统一壁纸底层容器，避免 WebGL/GPU 合成层 iframe 越级覆盖内容层 -->
+<div id="wallpaper-layer">
+  <canvas id="nebula"></canvas>
+  <canvas id="starfield"></canvas>
+
+  <!-- ★ 海洋主题 Three.js WebGL 壁纸层 -->
+  <iframe id="oceanfield" src="" allow="autoplay"></iframe>
+
+  <!-- ★ v12.2: 专注时刻 3D 打字机壁纸 iframe（恢复 Three.js，用 isolation:isolate 防止越级覆盖） -->
+  <iframe id="typewriterfield" src="" style="display:none" allow="autoplay"></iframe>
+</div>
+
+<!-- ★ 全屏节日环境光效系统 -->
+<div class="festival-ambient" id="festivalAmbient">
+  <!-- 渐晕遮罩 -->
+  <div class="ambient-vignette" id="ambientVignette"></div>
+  <!-- 底部柔光 -->
+  <div class="ambient-glow-bottom" id="ambientGlowBottom"></div>
+  <!-- 四周边光 -->
+  <div class="ambient-edge-top" id="ambientEdgeTop"></div>
+  <div class="ambient-edge-bottom" id="ambientEdgeBottom"></div>
+  <div class="ambient-edge-left" id="ambientEdgeLeft"></div>
+  <div class="ambient-edge-right" id="ambientEdgeRight"></div>
+  <!-- 胶片颗粒 -->
+  <canvas class="ambient-grain" id="ambientGrain"></canvas>
+  <!-- 鼠标跟随光晕 -->
+  <div class="ambient-mouse-light" id="ambientMouseLight"></div>
+  <!-- 四角装饰 -->
+  <div class="festival-corner festival-corner-tl" id="festivalCornerTL"></div>
+  <div class="festival-corner festival-corner-tr" id="festivalCornerTR"></div>
+  <div class="festival-corner festival-corner-bl" id="festivalCornerBL"></div>
+  <div class="festival-corner festival-corner-br" id="festivalCornerBR"></div>
+</div>
+
+<!-- ★ 节日粒子特效容器 -->
+<div class="festival-effects" id="festivalEffects"></div>
+
+<!-- ★ 历史会话触发按钮 -->
+<div class="history-toggle-btn" onclick="toggleHistorySidebar()" data-i18n-title="history.toggle" title="历史会话">≡</div>
+
+<!-- ★ File Explorer Sidebar -->
+<div class="file-explorer-sidebar" id="fileExplorerSidebar" style="display:none;">
+  <div class="file-explorer-header">
+    <span class="file-explorer-title">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+      Files
+    </span>
+    <div class="file-explorer-actions">
+      <button class="file-explorer-btn" onclick="fileExplorerRefresh()" title="Refresh">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+      </button>
+      <button class="file-explorer-btn" onclick="toggleFileExplorer()" title="Close">x</button>
+    </div>
+  </div>
+  <div class="file-explorer-path" id="fileExplorerPath" title="Current directory"></div>
+  <div class="file-explorer-body" id="fileExplorerBody">
+    <div class="file-explorer-empty">Open a workspace to browse files</div>
+  </div>
+</div>
+<!-- ★ File Explorer toggle button -->
+<div class="file-explorer-toggle-btn" onclick="toggleFileExplorer()" title="File Explorer">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+</div>
+
+<!-- ★ v4.1.28: 模型状态指示器已合并进输入区 engine-chip（见 input-toolbar） -->
+
+<!-- ★ Ollama 模型信息弹窗 -->
+<div class="ollama-info-popup" id="ollamaInfoPopup">
+  <h4>Ollama 模型状态</h4>
+  <div id="ollamaInfoContent">加载中...</div>
+</div>
+
+<!-- ★ 心跳断连提示 -->
+<div class="heartbeat-disconnect" id="heartbeatDisconnect">
+  <div class="hb-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+  <div class="hb-text" id="hbDisconnectText">连接断开，正在重连...</div>
+  <div class="hb-sub" id="hbDisconnectSub">已保留您的消息内容</div>
+</div>
+
+<!-- ★ 历史会话侧边栏 -->
+<div class="history-sidebar" id="historySidebar">
+  <div class="history-sidebar-header">
+    <div class="history-sidebar-title">历史会话</div>
+    <div class="history-sidebar-actions">
+      <button class="history-new-btn" onclick="createNewSession()" title="新建会话">+</button>
+      <button class="history-sidebar-close" onclick="toggleHistorySidebar()" title="关闭">×</button>
+    </div>
+  </div>
+  <div class="history-search-box">
+    <input type="text" class="history-search-input" id="historySearchInput"
+           placeholder="搜索历史消息..." oninput="onHistorySearch(this.value)">
+  </div>
+  <div class="history-list" id="historyList">
+    <div class="history-empty">加载中...</div>
+  </div>
+</div>
+
+<!-- ★ v4.1.17: Worktree 隔离工作区面板 -->
+<div class="worktree-panel" id="worktreePanel" style="display:none;">
+  <div class="todo-header">
+    <div class="todo-header-title">
+      <span style="color:#9b59b6;font-size:13px;">⛓</span>
+      <span data-i18n="worktree.title">Worktree 隔离区</span>
+      <span class="todo-header-count" id="worktreeCount" style="color:#9b59b6;background:rgba(155,89,182,0.1);" data-i18n="worktree.count">0 个</span>
+    </div>
+    <button class="todo-btn" onclick="toggleWorktreePanel()" data-i18n-title="todo.close" title="关闭">✕</button>
+  </div>
+  <div class="worktree-create-row">
+    <input id="worktreeTaskInput" placeholder="输入任务描述，创建隔离分支... (Enter 创建)" data-i18n="worktree.taskPlaceholder" onkeydown="if(event.key==='Enter')createWorktree()">
+    <button class="todo-btn primary" onclick="createWorktree()" data-i18n="worktree.create">＋ 创建</button>
+  </div>
+  <div class="worktree-list" id="worktreeList">
+    <div style="padding:20px;text-align:center;color:rgba(255,255,255,0.4);font-size:12px;" data-i18n="ws.loading">加载中...</div>
+  </div>
+  <div class="todo-footer">
+    <span style="font-size:10px;color:rgba(255,255,255,0.3);" data-i18n="worktree.hint">Agent 在隔离分支工作，主工作区零污染</span>
+    <select id="worktreeActorMergeMode" title="合并模式：跑完是否自动合并回主分支" onchange="onWorktreeMergeModeChange(this.value)"
+            style="background:rgba(155,89,182,0.12);color:#e8d5f2;border:1px solid rgba(155,89,182,0.5);border-radius:5px;font-size:11px;padding:3px 4px;max-width:118px;">
+      <option value="auto" data-i18n="worktree.autoMerge">自动合并回主</option>
+      <option value="keep" data-i18n="worktree.keep">保留供审阅</option>
+    </select>
+    <button class="todo-btn" style="background:#9b59b6;border-color:#9b59b6;color:#fff;" onclick="runWorktreeActor()" title="每个子 Agent 在独立 Git worktree 隔离目录并行" data-i18n="worktree.actor">⛓ Worktree Actor</button>
+    <button class="todo-btn" onclick="refreshWorktreeList()" data-i18n="worktree.refresh">刷新</button>
+  </div>
+</div>
+
+<!-- ★ 376-1: 技能市场面板（恢复 v4.7.17 移除的入口；collapsed 初始隐藏，toggleSkillPanel 切换） -->
+<div class="skill-panel collapsed" id="skillPanel"
+     style="position:fixed; top:60px; right:12px; width:320px; border:1px solid rgba(255,105,0,0.15); border-radius:10px; box-shadow:0 8px 32px rgba(0,0,0,0.5); z-index:100; backdrop-filter:blur(8px); display:flex;">
+  <div class="skill-toolbar">
+    <span class="skill-toolbar-title" onclick="toggleSkillPanel()">技能市场</span>
+    <input type="text" class="skill-search-input" id="skillSearchInput" placeholder="搜索技能..." oninput="onSkillSearchInput(this.value)">
+  </div>
+  <div class="skill-filters" id="skillFilters"></div>
+  <div class="skill-content" id="skillContent"><div class="skill-empty">加载中...</div></div>
+</div>
+
+<!-- ★ Trae风格工作表面板（★ v4.1.15: 双tab 任务列表/文件列表） -->
+<div class="todo-panel" id="todoPanel">
+  <div class="todo-header">
+    <div class="todo-header-title">
+      <span class="mimo-icon mimo-icon-progress">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="15" x2="12" y2="15"/></svg>
+      </span>
+      <span data-i18n="todo.title">工作表</span>
+      <span class="todo-header-count" id="todoCount" data-i18n="todo.count">0 项</span>
+    </div>
+    <button class="todo-btn" onclick="toggleTodoPanel()" data-i18n-title="todo.close" title="关闭">✕</button>
+  </div>
+  <div class="todo-tabs">
+    <button class="todo-tab active" id="tabTasks" onclick="switchTodoTab('tasks')" data-i18n="todo.tasks">任务列表 <span id="todoTabCount"></span></button>
+    <button class="todo-tab" id="tabFiles" onclick="switchTodoTab('files')" data-i18n="todo.files">文件列表 <span id="fileTabCount"></span></button>
+  </div>
+  <div class="todo-list" id="todoList">
+    <!-- 动态生成任务项 -->
+  </div>
+  <div class="todo-file-list" id="todoFileList" style="display:none;">
+    <!-- ★ v4.1.15: 动态生成文件列表（从 Timeline 统计） -->
+  </div>
+  <div class="todo-footer">
+    <button class="todo-btn" onclick="clearCompletedTodos()" data-i18n="todo.clearCompleted">清除已完成</button>
+    <button class="todo-btn primary" onclick="showAddTodoDialog()" data-i18n="todo.add">＋ 添加任务</button>
+  </div>
+</div>
+
+<!-- ===== ★ Plan规划模式面板（Trae风格任务规划） ===== -->
+<div class="plan-mode-panel" id="planModePanel">
+  <div class="plan-mode-header">
+    <div class="plan-mode-title">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 4 L9 20 M9 4 L15 4 L15 8 L9 8 M9 12 L18 12 L18 16 L9 16"/></svg>
+      <span data-i18n="plan.title">Plan 规划模式</span>
+    </div>
+    <button class="plan-mode-close" onclick="togglePlanMode()">✕</button>
+  </div>
+  <div class="plan-mode-body" id="planModeBody">
+    <!-- 动态生成规划步骤 -->
+  </div>
+  <div class="plan-mode-footer">
+    <button class="plan-mode-btn" onclick="clearPlanSteps()" data-i18n="plan.clear">清空</button>
+    <button class="plan-mode-btn primary" onclick="executePlanSteps()" data-i18n="plan.execute">执行规划</button>
+  </div>
+</div>
+
+<!-- ★ 自主风格SVG图标定义（小米简笔画风格 — 独特设计） -->
+<svg style="display:none">
+  <!-- 思考：灯泡+灵感射线（创意闪现） -->
+  <symbol id="icon-think" viewBox="0 0 24 24">
+    <path d="M9 18 L15 18 M10 21 L14 21" stroke="#ff9a4a" fill="none" stroke-width="1.8" stroke-linecap="round"/>
+    <path d="M12 3 C8 3 5 6 5 10 C5 12 6 14 8 15.5 L8 17 L16 17 L16 15.5 C18 14 19 12 19 10 C19 6 16 3 12 3 Z" stroke="#ff9a4a" fill="none" stroke-width="1.8" stroke-linejoin="round"/>
+    <line x1="12" y1="1" x2="12" y2="0.5" stroke="#ff9a4a" stroke-width="1.5"/>
+    <line x1="4" y1="4" x2="3.5" y2="3.5" stroke="#ff9a4a" stroke-width="1.5"/>
+    <line x1="20" y1="4" x2="20.5" y2="3.5" stroke="#ff9a4a" stroke-width="1.5"/>
+  </symbol>
+  <!-- 写代码：</>尖括号+下方代码线 -->
+  <symbol id="icon-code" viewBox="0 0 24 24">
+    <polyline points="8,6 3,12 8,18" stroke="#66bb6a" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    <polyline points="16,6 21,12 16,18" stroke="#66bb6a" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    <line x1="13" y1="5" x2="11" y2="19" stroke="#66bb6a" stroke-width="1.8" stroke-linecap="round"/>
+  </symbol>
+  <!-- 检索：雷达扫描圈+扫描线 -->
+  <symbol id="icon-search" viewBox="0 0 24 24">
+    <circle cx="11" cy="11" r="7" stroke="#42a5f5" fill="none" stroke-width="1.8"/>
+    <circle cx="11" cy="11" r="3" stroke="#42a5f5" fill="none" stroke-width="1.5" stroke-dasharray="2,2"/>
+    <line x1="11" y1="11" x2="17" y2="5" stroke="#42a5f5" stroke-width="1.8" stroke-linecap="round"/>
+    <circle cx="11" cy="11" r="1.5" fill="#42a5f5"/>
+  </symbol>
+  <!-- 修改：扳手简笔画 -->
+  <symbol id="icon-edit" viewBox="0 0 24 24">
+    <path d="M14 7 C14 5 15 3 17 3 L19 5 C19 7 17 8 15 8 L7 16 C5 18 4 19 4 21 L4 21 C4 21 6 20 8 18 L16 10 C16 12 17 13 19 13 L21 11 C21 9 19 8 17 8" stroke="#ffa726" fill="none" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+  </symbol>
+  <!-- 工作表：清单+勾选 -->
+  <symbol id="icon-progress" viewBox="0 0 24 24">
+    <rect x="3" y="3" width="18" height="18" rx="2" stroke="#ab47bc" fill="none" stroke-width="1.8"/>
+    <polyline points="7,9 8,10 10,8" stroke="#ab47bc" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <line x1="12" y1="9" x2="17" y2="9" stroke="#ab47bc" stroke-width="1.5" stroke-linecap="round"/>
+    <polyline points="7,15 8,16 10,14" stroke="#ab47bc" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <line x1="12" y1="15" x2="17" y2="15" stroke="#ab47bc" stroke-width="1.5" stroke-linecap="round"/>
+  </symbol>
+</svg>
+
+<!-- ★ v4.7.17 整改：积分面板已随积分按钮一起移除 -->
+
+<!-- ===== 顶部统一操作栏（v4.7.17 整改：移除搜索框与积分器，保留原有 7 项按钮） ===== -->
+<div class="action-buttons">
+  <!-- ★ 原有 7 项按钮（保持原顺序） -->
+  <button class="action-btn" onclick="toggleTodoPanel()" title="工作表 (Ctrl+T)" style="position:relative;">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="7" y1="8" x2="17" y2="8"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="7" y1="16" x2="13" y2="16"/></svg>
+    <span class="todo-badge" id="todoBadge" style="position:absolute;top:-4px;right:-4px;background:#ff6900;color:#fff;font-size:10px;padding:2px 5px;border-radius:10px;display:none;">0</span>
+  </button>
+  <button class="action-btn" onclick="togglePlanMode()" title="Plan规划模式 (Ctrl+Shift+P)" id="planModeBtn">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 4 L9 20 M9 4 L15 4 L15 8 L9 8 M9 12 L18 12 L18 16 L9 16"/></svg>
+  </button>
+  <button class="action-btn" onclick="toggleCmdPanel()" title="命令面板 (Ctrl+P)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 8 8 12 4 16"/><line x1="10" y1="16" x2="20" y2="16"/></svg>
+  </button>
+  <button class="action-btn" onclick="clearOutput()" title="清除输出 (Ctrl+L)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+  </button>
+  <!-- ★ 376-1: 恢复技能市场入口（v4.7.17 整改时被移除） -->
+  <button class="action-btn" onclick="toggleSkillPanel()" title="技能市场">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+  </button>
+  <button class="action-btn settings-gear" onclick="openSettings()" title="设置 (Ctrl+,)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    <span class="update-badge" id="updateBadge" style="display:none;"></span>
+  </button>
+  <!-- ★ v4.7.17 整改：移除重复的工具面板切换与 Worktree 按钮（已被更大上边栏/左栏覆盖） -->
+</div>
+
+<div id="content">
+  <!-- ★ v12.10 REBUILD: 移除 #focus-moment-wallpaper 孤立 div
+       原因：它是 #content 的 flex 子项，无 CSS 规则但会干扰 flex 布局计算
+       打字机壁纸完全由 #wallpaper-layer 内的 iframe 提供 -->
+
+  <!-- 1. 顶部 Logo + 节日装饰（首屏大字：开始对话后淡出） -->
+  <div class="logo-area" id="heroArea">
+    <!-- ★ 左侧节日装饰 -->
+    <div class="festival-decoration-left" id="festivalDecoLeft"></div>
+    
+    <div class="mimo-logo">
+      <span class="lemon-emoji">🍋</span>
+      <span class="mimo-part">LEMON</span>
+      <span class="code-part">WORK</span>
+    </div>
+    
+    <!-- ★ 右侧节日装饰 -->
+    <div class="festival-decoration-right" id="festivalDecoRight"></div>
+  </div>
+
+  <!-- ★ 节日祝福语横幅 -->
+  <div class="festival-banner" id="festivalBanner" style="display:none;">
+    <span class="festival-banner-text" id="festivalBannerText"></span>
+    <button class="festival-banner-close" onclick="closeFestivalBanner()">×</button>
+  </div>
+
+  <!-- ★ 工作区选择器 -->
+  <div class="workspace-bar">
+    <div class="workspace-selector" id="workspaceSelector" onclick="toggleWorkspaceDropdown()">
+      <span class="workspace-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span>
+      <span class="workspace-name" id="workspaceName" data-i18n="ws.loading">加载中...</span>
+      <span class="workspace-arrow"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
+    </div>
+    <div class="workspace-actions">
+      <button class="workspace-action-btn" onclick="refreshWorkspace()" data-i18n-title="ws.refresh" title="刷新工作区"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button>
+      <button class="workspace-action-btn" onclick="openWorkspaceInExplorer()" data-i18n-title="ws.openInExplorer" title="在资源管理器中打开"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><polyline points="9 14 12 11 15 14"/></svg></button>
+    </div>
+    <!-- 工作区下拉菜单 -->
+    <div class="workspace-dropdown" id="workspaceDropdown">
+      <div class="workspace-dropdown-header" data-i18n="ws.title">工作区列表</div>
+      <div id="workspaceList"></div>
+      <div class="workspace-dropdown-footer">
+        <button class="workspace-add-btn" id="workspaceAddBtn" onclick="showWorkspaceAddDialog()" data-i18n="ws.add">＋ 添加工作区</button>
+        <div class="workspace-add-dialog" id="workspaceAddDialog">
+          <input type="text" class="workspace-add-input" id="workspacePathInput" placeholder="项目路径（如 D:\projects\my_app）" data-i18n="ws.pathPlaceholder">
+          <input type="text" class="workspace-add-input" id="workspaceNameInput" placeholder="显示名称（可选）" data-i18n="ws.namePlaceholder">
+          <div class="workspace-add-actions">
+            <button class="workspace-add-cancel" onclick="hideWorkspaceAddDialog()" data-i18n="ws.cancel">取消</button>
+            <button class="workspace-add-confirm" onclick="confirmAddWorkspace()" data-i18n="ws.confirmAdd">添加</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 工作区切换过渡遮罩 -->
+  <div class="workspace-transition" id="workspaceTransition">
+    <div class="workspace-transition-spinner">
+      <div class="spinner-ring"></div>
+      <div data-i18n="ws.switch">切换工作区...</div>
+    </div>
+  </div>
+
+  <!-- 2. Workspace Area: tab bar + multi-view content -->
+  <div class="workspace-area" id="workspaceArea">
+    <div class="workspace-tab-bar" id="workspaceTabBar">
+      <button class="workspace-tab active" data-view="chat" onclick="switchWorkspaceView('chat')">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        Chat
+      </button>
+    </div>
+    <div class="workspace-views">
+      <div class="workspace-view active" id="workspaceViewChat">
+        <div class="output-area" id="outputArea">
+          <!-- ★第361章: 会话框头部小风扇 — Agent 工作时旋转，任务结束消失 -->
+          <div id="agentFanBar" style="display:none;">
+            <svg class="agent-fan" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ff9a4a" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <g class="agent-fan-blades">
+                <path d="M12 12 C12 6, 10 4, 12 2 C14 4, 12 6, 12 12 Z" fill="rgba(255,154,74,0.85)" stroke="none"/>
+                <path d="M12 12 C18 12, 20 10, 22 12 C20 14, 18 12, 12 12 Z" fill="rgba(255,154,74,0.85)" stroke="none"/>
+                <path d="M12 12 C12 18, 14 20, 12 22 C10 20, 12 18, 12 12 Z" fill="rgba(255,154,74,0.85)" stroke="none"/>
+                <path d="M12 12 C6 12, 4 14, 2 12 C4 10, 6 12, 12 12 Z" fill="rgba(255,154,74,0.85)" stroke="none"/>
+              </g>
+              <circle cx="12" cy="12" r="2" fill="#ff6900" stroke="none"/>
+            </svg>
+            <span id="agentFanText">任务执行中…</span>
+          </div>
+          <!-- ★第361章: 会话级任务列表（Trae/CodeBuddy 式）— onTaskListUpdate 驱动 -->
+          <div id="agentTaskPanel" style="display:none;"></div>
+          <!-- ★第362章: 对话消息排队角标 — Agent 运行中新消息排队，收口自动执行 -->
+          <!-- ★ Lemon Work: 点击展开排队列表（逐条预览 + 单条撤销） -->
+          <div id="pendingQueueBar" style="display:none;" onclick="_togglePendingQueueList()" title="点击展开/收起排队列表">
+            <span class="pq-icon">⏸</span>
+            <span id="pendingQueueText">0 条排队中</span>
+            <span class="pq-note" id="pendingQueueNote"></span>
+            <button class="pq-pause" title="挂起/继续自动发送" onclick="event.stopPropagation();_toggleQueuePause()">⏸ 挂起</button>
+            <button class="pq-clear" title="清空排队消息" onclick="event.stopPropagation();clearPendingQueue()">×</button>
+          </div>
+          <div class="output-messages" id="outputMessages"></div>
+        </div>
+      </div>
+      <div class="workspace-view" id="workspaceViewCode" style="display:none;">
+        <div class="code-viewer" id="codeViewerContainer" style="width:100%;height:100%;"></div>
+      </div>
+      <div class="workspace-view" id="workspaceViewDoc" style="display:none;">
+        <div class="doc-viewer" id="docViewerContainer" style="width:100%;height:100%;overflow:auto;"></div>
+      </div>
+      <div class="workspace-view" id="workspaceViewImage" style="display:none;">
+        <div class="image-viewer" id="imageViewerContainer" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;overflow:auto;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ★ v4.7.x: 顶栏会话/模型栏已移除（与 .input-toolbar 引擎芯片重复 → 冗余） -->
+  <!-- 保留 #sessionBar / #modelLabel / #modeLabelSm 占位，避免旧 JS 引用崩溃 -->
+  <span id="sessionBar" hidden></span>
+  <span id="sessionLabel" hidden></span>
+  <span id="modelLabel" hidden></span>
+  <span id="modeLabelSm" hidden></span>
+
+  <!-- ★ v4.1.15: 队列提示条（Agent 忙时排队显示） -->
+  <div class="queue-bar" id="queueBar" style="display:none;">
+    <span class="queue-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h14M5 21h14M7 3v3a5 5 0 0 0 5 5 5 5 0 0 0-5 5v3M17 3v3a5 5 0 0 1-5 5 5 5 0 0 1 5 5v3"/></svg></span>
+    <span id="queueText">消息已排队</span>
+    <span class="queue-badge" id="queueBadge" style="display:none;">0</span>
+    <button class="queue-clear" onclick="_pendingQueue=[];_updateQueueBadge();document.getElementById('queueBar').style.display='none';" title="清空队列">✕</button>
+  </div>
+
+  <!-- 4. 底部输入区（v4.7.x 极简重设计：Claude Code 风格） -->
+  <div class="input-area">
+    <!-- ★ v5.1: 独立底部状态栏条（TRAE 白盒 P-F 独立化：引擎/模型/循环/工具/耗时/Token） -->
+    <div class="agent-statusbar" id="agentStatusBar">
+      <span class="statusbar-item statusbar-engine"><span class="statusbar-dot" id="sbEngineDot"></span><span id="sbEngine">—</span></span>
+      <span class="statusbar-sep">·</span>
+      <span class="statusbar-item" id="sbModel">—</span>
+      <span class="statusbar-sep">·</span>
+      <span class="statusbar-item">循环 <b id="sbIter" class="statusbar-num">0</b></span>
+      <span class="statusbar-item">工具 <b id="sbTools" class="statusbar-num">0</b> 次</span>
+      <span class="statusbar-sep">·</span>
+      <span class="statusbar-item">耗时 <b id="sbTime" class="statusbar-num">0</b>s</span>
+      <span class="statusbar-item">输入 <b id="sbIn" class="statusbar-num">0</b> tok</span>
+      <span class="statusbar-item">输出 <b id="sbOut" class="statusbar-num">0</b> tok</span>
+      <span class="statusbar-item" id="sbCost" style="display:none;">花费 <b id="sbCostVal" class="statusbar-num">0</b></span>
+      <span class="statusbar-spacer"></span>
+      <!-- ★392A-3: 流断看门狗两档提示文案位（90s/300s，py 侧定时驱动显隐） -->
+      <span class="statusbar-item statusbar-stall" id="sbStall" style="display:none;"></span>
+      <!-- ★392A-2: 停止按钮 —— 运行中显示；点击后状态条立即反馈"正在中断当前请求…"，
+           并经 pybridge → EngineManager.cancel_agent() 强断在途 HTTP（不等轮间检查） -->
+      <button class="statusbar-stop" id="sbStopBtn" style="display:none;"
+              onclick="stopAgentTask()" title="中断当前请求（不等轮间检查）">⏹ 中断</button>
+      <span class="statusbar-item statusbar-state" id="sbState">空闲</span>
+    </div>
+    <!-- ★ v4.1.28: Agent 任务执行条（CodeBuddy 式：任务列表/文件列表） -->
+    <div class="agent-taskbar" id="agentTaskbar" style="display:none;">
+      <span class="agent-taskbar-tab active" id="taskbarTabTasks" onclick="showTaskbarPanel('tasks')">任务列表 <b id="taskbarTodoCount">0</b></span>
+      <span class="agent-taskbar-tab" id="taskbarTabFiles" onclick="showTaskbarPanel('files')">文件列表 <b id="taskbarFileCount">0</b></span>
+      <span class="agent-taskbar-status" id="taskbarStatus">就绪</span>
+      <button class="agent-taskbar-close" onclick="toggleAgentTaskbar(false)" title="收起任务条"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button>
+    </div>
+    <div class="agent-taskbar-panel" id="agentTaskbarPanel" style="display:none;"></div>
+    <!-- ★ v4.7.x: 主输入框（单框容器 + 隐藏文件 input） -->
+    <div class="input-box" id="inputBox">
+      <!-- ★ v4.7.x: 粘贴/拖拽图片预览（textarea 上方，悬浮 chips 式） -->
+      <div class="input-attachments" id="inputAttachments" style="display:none;">
+        <span class="input-attachments-count" id="inputAttachmentsCount">0</span>
+        <button class="input-attachments-clear" onclick="clearInputAttachments()" title="清空附件">×</button>
+      </div>
+      <div class="input-row">
+        <textarea id="inputField" rows="1"
+                  placeholder="发消息、粘贴图片、拖入文件… (Enter 发送 / Shift+Enter 换行)"
+                  data-i18n="input.placeholderFull"
+                  onkeydown="handleKey(event)" oninput="autoGrowInput(this)"
+                  onpaste="handleInputPaste(event)"
+                  ondragover="handleInputDragOver(event)"
+                  ondrop="handleInputDrop(event)"
+                  ondragleave="handleInputDragLeave(event)"></textarea>
+        <input type="file" id="imageInput" accept="image/*" multiple style="display:none" onchange="handleImageUpload(event)">
+        <input type="file" id="fileInput" multiple style="display:none" onchange="handleFileUpload(event)">
+      </div>
+      <!-- ★ Lemon Work：输入文字独占首行；模型选择 / 时间 / 发送键统一沉到底部工具行 -->
+      <div class="input-toolbar-row">
+        <div class="robot-box" id="robot" onclick="handleRobotClick()" oncontextmenu="handleRobotRightClick(event)" data-i18n-title="robot.tip" title="左键互动 · 右键聊天">
+          <!-- ★ 节日装饰层 -->
+          <div class="robot-festival-deco" id="robotFestivalDeco"></div>
+          <div class="robot-eyes">
+            <div class="robot-eye"></div>
+            <div class="robot-eye"></div>
+          </div>
+          <div class="robot-mouth"></div>
+          <!-- 简笔画小手：一条线+一个小圆 -->
+          <div class="robot-arm robot-arm-left" id="robotArmLeft">
+            <div class="robot-hand"></div>
+          </div>
+          <div class="robot-arm robot-arm-right" id="robotArmRight">
+            <div class="robot-hand"></div>
+          </div>
+          <!-- ★ 道具容器：奶茶、文件、笔记本、垃圾桶等 -->
+          <div class="robot-props" id="robotProps">
+            <!-- 奶茶杯 -->
+            <div class="prop-item prop-tea" id="propTea">
+              <div class="tea-cup">
+                <div class="tea-lid"></div>
+                <div class="tea-body"></div>
+                <div class="tea-straw"></div>
+              </div>
+            </div>
+            <!-- 文件 -->
+            <div class="prop-item prop-file" id="propFile">
+              <div class="file-paper"></div>
+              <div class="file-lines"></div>
+            </div>
+            <!-- 笔记本 -->
+            <div class="prop-item prop-notebook" id="propNotebook">
+              <div class="notebook-cover"></div>
+              <div class="notebook-pages"></div>
+              <div class="notebook-pen"></div>
+            </div>
+            <!-- 垃圾桶（右侧弹出） -->
+            <div class="prop-item prop-trash" id="propTrash">
+              <div class="trash-body"></div>
+              <div class="trash-lid"></div>
+            </div>
+            <!-- 眼罩（睡觉用） -->
+            <div class="prop-item prop-blindfold" id="propBlindfold"></div>
+          </div>
+        </div>
+      <!-- ★ Lemon Work: 思考档位（微信版 light10/standard20/high40 对齐） -->
+      <select class="lw-effort" id="lwEffort" title="思考力度：控制 Agent 最大工具轮数"
+              onchange="if(window._callPython)window._callPython('setAgentEffort', this.value)">
+        <option value="light">⚡ 轻量·10轮</option>
+        <option value="standard" selected>🧠 标准·自动</option>
+        <option value="deep">🔬 深度·40轮</option>
+      </select>
+        <div class="engine-chip engine-chip-inline" id="engineChip" onclick="toggleModelPanel()" data-i18n-title="mode.engineChip" title="点击选择 AI 引擎 / 模型">
+          <span class="engine-chip-dot" id="modelDisplayDot"></span>
+          <span class="engine-chip-status" id="engineStatusText" data-i18n="mode.engineStatus">Lemon Code</span>
+          <span class="engine-chip-sep">·</span>
+          <span class="engine-chip-model" id="modelDisplayName" data-i18n="mode.modelAuto">模型: 自动</span>
+          <span class="engine-chip-arrow"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
+        </div>
+        <div class="time-widget" id="timeWidget" title="当前时间">
+          <div class="time-clock" id="clockTime">00:00</div>
+          <div class="time-date" id="clockDate">--/--</div>
+        </div>
+        <button class="send-btn" id="sendBtn" onclick="sendMessage()" title="发送 (Enter)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        </button>
+      </div>
+    </div>
+    <!-- ★ v4.3.0: MIEMIE 咩咩工作区（仿 Claude Code / Kimi Code 风格）
+         三段布局：
+           head：咩咩头像 + 状态/当前任务 + mood pill
+           body：左任务流（工具调用块链） + 右咩咩像素点（黑底白线，无背景框）
+           foot：命令输入框 + 快捷任务按钮
+    -->
+    <!-- ★ v4.7.1: 双视图重构（对话/任务流）+ 指令 chips + 权限胶囊 + HITL 确认卡容器
+         视图：
+           chat 视图（#miemieChatView）：闲聊、提问、回复（打字机）
+           flow 视图（#miemieFlowView）：工具调用节点树 + 确认卡 + 总结
+         权限：miemiePermBtn 三档循环（自动/确认/调试），经 pybridge 与 Python 端同步
+         chips：点击填入输入框，执行权归用户（第 246 章结论） -->
+    <div class="miemie-panel" id="miemiePanel" style="display:none;">
+      <!-- 顶栏：品牌 + 状态 + mood + 权限 + 头像 -->
+      <div class="miemie-head">
+        <div class="miemie-head-info">
+          <div class="miemie-title"><span class="brand">MIEMIE</span> <span data-i18n="miemie.panelTitle">咩咩 · Agent 工作台</span></div>
+          <div class="miemie-sub" id="miemieSub" data-i18n="miemie.subIdle">空闲 · 等待任务</div>
+        </div>
+        <span class="miemie-mood-pill" id="miemieMoodPill" data-i18n="miemie.moodIdle">空闲</span>
+        <button class="miemie-perm-btn" id="miemiePermBtn" onclick="miemieCyclePermission()" data-i18n-title="miemie.permTip" data-i18n="miemie.permAuto">权限·自动</button>
+        <div class="miemie-avatar" id="miemieAvatarMini" data-i18n-title="miemie.avatarTip" title="点我互动"></div>
+        <button class="miemie-head-btn" id="miemieStyleBtn" onclick="toggleMiemieAvatarStyle()" data-i18n-title="miemie.styleTip" title="形象：像素">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M12 3v2M5 5l1.5 1.5M19 5l-1.5 1.5M3 12h2M19 12h2M5 19l1.5-1.5M19 19l-1.5-1.5M12 19v2"/></svg>
+        </button>
+        <button class="miemie-head-btn" onclick="toggleMiemiePanel(false)" data-i18n-title="miemie.collapseTip" title="收起">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+      </div>
+      <!-- 视图切换：对话 / 任务流 -->
+      <div class="miemie-tabs">
+        <button class="miemie-tab active" id="miemieTabChat" onclick="miemieSwitchView('chat')" data-i18n="miemie.tabChat">对话</button>
+        <button class="miemie-tab" id="miemieTabFlow" onclick="miemieSwitchView('flow')" data-i18n="miemie.tabFlow">任务流</button>
+        <button class="miemie-tab" id="miemieTabOverview" onclick="miemieSwitchView('overview')">概览</button>
+        <span class="miemie-tabs-hint" id="miemieTabsHint"></span>
+      </div>
+      <!-- 中栏：双视图 -->
+      <div class="miemie-body">
+        <!-- 对话视图：用户消息 + 咩咩回复 -->
+        <div class="miemie-view" id="miemieChatView">
+          <div class="miemie-stream" id="miemieChatStream">
+            <div class="miemie-empty" id="miemieChatEmpty">
+              <p class="miemie-empty-title" data-i18n="miemie.emptyChatTitle">和咩咩聊聊</p>
+              <p class="miemie-empty-desc" data-i18n="miemie.emptyChatDesc">聊天、提问、闲聊都在这里。发任务时自动转到任务流。</p>
+            </div>
+          </div>
+        </div>
+        <!-- 任务流视图：工具节点树 + 确认卡 + 总结 -->
+        <div class="miemie-view" id="miemieFlowView" style="display:none;">
+          <div class="miemie-stream" id="miemieStream">
+            <div class="miemie-empty" id="miemieStreamEmpty">
+              <p class="miemie-empty-title" data-i18n="miemie.emptyFlowTitle">任务流</p>
+              <p class="miemie-empty-desc" data-i18n="miemie.emptyFlowDesc">咩咩执行任务的每一步都会显示在这里，高风险操作会弹确认卡。</p>
+              <div class="miemie-quick" id="miemieQuick">
+                <button onclick="miemieRunTask('analyze')" data-i18n="miemie.quickAnalyze">分析</button>
+                <button onclick="miemieRunTask('search')" data-i18n="miemie.quickSearch">搜索</button>
+                <button onclick="miemieRunTask('memory')" data-i18n="miemie.quickMemory">记忆</button>
+                <button onclick="miemieRunTask('plan')" data-i18n="miemie.quickPlan">规划</button>
+                <button onclick="miemieRunTask('db')" data-i18n="miemie.quickDb">数据库</button>
+                <button class="miemie-quick-special" onclick="miemieOpenPersona()" data-i18n="miemie.quickPersona">人格分身</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- 概览视图：统计 + 时间线 + 工具频率 -->
+        <div class="miemie-view" id="miemieOverviewView" style="display:none;">
+          <div class="miemie-stream" id="miemieOverviewStream">
+            <div class="miemie-empty">
+              <p class="miemie-empty-title">任务概览</p>
+              <p class="miemie-empty-desc">完成任务后，这里会显示统计数据和趋势。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- 指令 chips（点击填入输入框，执行权归用户） -->
+      <div class="miemie-chips" id="miemieChips">
+        <button class="miemie-chip" onclick="miemieChipFill('/analyze')" data-i18n="miemie.chipAnalyze">分析项目</button>
+        <button class="miemie-chip" onclick="miemieChipFill('/search')" data-i18n="miemie.chipSearch">搜索代码</button>
+        <button class="miemie-chip" onclick="miemieChipFill('/memory')" data-i18n="miemie.chipMemory">查记忆</button>
+        <button class="miemie-chip" onclick="miemieChipFill('/plan')" data-i18n="miemie.chipPlan">规划任务</button>
+        <button class="miemie-chip" onclick="miemieChipFill('/db')" data-i18n="miemie.chipDb">查数据库</button>
+        <button class="miemie-chip" onclick="miemieOpenPersona()" data-i18n="miemie.quickPersona">人格分身</button>
+        <button class="miemie-chip" onclick="miemieStyleReview('style_review')">代码风格</button>
+        <button class="miemie-chip" onclick="miemieStyleReview('quality_review')">代码质量</button>
+      </div>
+      <!-- 底栏：命令输入 -->
+      <div class="miemie-foot">
+        <span class="miemie-prompt">&gt;</span>
+        <input id="miemieInput" class="miemie-input" placeholder="输入任务、聊天或 / 指令…" onkeydown="if(event.key==='Enter')miemieSubmitInput()" />
+        <button class="miemie-foot-btn" onclick="miemieSubmitInput()" title="发送">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        </button>
+        <button class="miemie-foot-btn miemie-foot-btn-mini" onclick="miemieClearStream()" data-i18n-title="miemie.clearFlowTip" title="清空任务流">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        </button>
+        <button class="miemie-foot-btn miemie-foot-btn-mini" onclick="miemieOpenService()" title="打开服务主页">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        </button>
+      </div>
+    </div>
+    <!-- ★ v4.1.28: 模型选择面板（锚定在输入区，浮于引擎芯片上方） -->
+    <div class="model-select-panel" id="modelSelectPanel" style="display:none;">
+    <div class="model-panel-header" data-i18n="model.title">模型选择</div>
+    <!-- ★ Lemon Work: 真实连接测试 —— 逐引擎 ping，绿/红 + 毫秒延迟 -->
+    <div class="mp-conn-row">
+      <button class="mp-conn-btn" onclick="testEngineLatency()">🔗 测试连接</button>
+      <span class="mp-conn-result" id="mpConnResult">未测试（ollama / Lemon Code / DeepSeek）</span>
+    </div>
+    <div class="model-provider-section" data-provider="mimocode">
+      <div class="model-provider-title"><span class="provider-dot mimocode-dot"></span>Lemon Code</div>
+      <div class="model-options" id="mimocodeModelOptions"></div>
+    </div>
+    <div class="model-provider-section" data-provider="ollama">
+      <div class="model-provider-title"><span class="provider-dot ollama-dot"></span><span data-i18n="model.ollama">Ollama 本地</span></div>
+      <div class="model-options" id="ollamaModelOptions"></div>
+    </div>
+    <div class="model-provider-section" data-provider="deepseek">
+      <div class="model-provider-title"><span class="provider-dot deepseek-dot"></span><span data-i18n="model.deepseek">DeepSeek 云端</span></div>
+      <div class="model-options" id="deepseekModelOptions"></div>
+    </div>
+    <!-- ★ v4.2.4: MIEMIE 咩咩引擎（品味分析 + 粒子咩咩 + 工作流注入） -->
+    <div class="model-provider-section" data-provider="miemie_v1">
+      <div class="model-provider-title"><span class="provider-dot miemie-dot"></span>MIEMIE <span data-i18n="model.miemie">咩咩</span></div>
+      <div class="model-options" id="miemie_v1ModelOptions"></div>
+    </div>
+    <!-- ★ Custom engines (dynamically added) -->
+    <div id="customEngineSections"></div>
+    <!-- ★ Add Custom Model button — opens wizard -->
+    <div class="model-custom-key" style="margin-top:4px;">
+      <div class="model-custom-key-toggle" onclick="openCustomEngineWizard()" style="cursor:pointer;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px;margin-right:4px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <span>Add Custom Model</span>
+      </div>
+    </div>
+    </div>
+  </div>
+
+<!-- ★ v4.7.x: 调试面板默认完全隐藏（debug-toolbar 按钮在无调试会话时全 disabled，
+     默认展示会让用户以为能点实际无效 → 改为命令面板主动打开再显示） -->
+<div class="debug-panel" id="debugPanel" style="display:none;">
+    <!-- 调试工具栏 -->
+    <div class="debug-toolbar">
+      <span class="debug-toolbar-title" onclick="toggleDebugPanel()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> 调试</span>
+      <button class="debug-btn" id="debugStartBtn" onclick="debugStart()" title="开始调试">
+        <span class="debug-btn-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"/></svg></span> 开始
+      </button>
+      <button class="debug-btn" id="debugContinueBtn" onclick="debugContinue()" title="继续执行" disabled>
+        <span class="debug-btn-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg></span> 继续
+      </button>
+      <button class="debug-btn" id="debugPauseBtn" onclick="debugPause()" title="暂停" disabled>
+        <span class="debug-btn-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg></span> 暂停
+      </button>
+      <button class="debug-btn" id="debugStopBtn" onclick="debugStop()" title="停止" disabled>
+        <span class="debug-btn-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="4" y="4" width="16" height="16" rx="2"/></svg></span> 停止
+      </button>
+      <span style="width:1px;height:18px;background:rgba(255,255,255,0.1);margin:0 4px;"></span>
+      <button class="debug-btn" id="debugStepOverBtn" onclick="debugStep('over')" title="单步跳过 (F10)" disabled>
+        <span class="debug-btn-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 17 18 12 13 7"/><path d="M4 12h14"/></svg></span> 跳过
+      </button>
+      <button class="debug-btn" id="debugStepIntoBtn" onclick="debugStep('into')" title="单步进入 (F11)" disabled>
+        <span class="debug-btn-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 17 12 22 17 17"/><path d="M12 4v16"/></svg></span> 进入
+      </button>
+      <button class="debug-btn" id="debugStepOutBtn" onclick="debugStep('out')" title="单步跳出 (Shift+F11)" disabled>
+        <span class="debug-btn-icon">⏏</span> 跳出
+      </button>
+      <span class="debug-state-badge" id="debugStateBadge">idle</span>
+    </div>
+    <!-- 调试标签页 -->
+    <div class="debug-tabs">
+      <div class="debug-tab active" onclick="switchDebugTab('variables', this)">变量<span class="debug-tab-badge" id="debugVarCount">0</span></div>
+      <div class="debug-tab" onclick="switchDebugTab('stack', this)">调用栈<span class="debug-tab-badge" id="debugStackCount">0</span></div>
+      <div class="debug-tab" onclick="switchDebugTab('breakpoints', this)">断点<span class="debug-tab-badge" id="debugBpCount">0</span></div>
+      <div class="debug-tab" onclick="switchDebugTab('watch', this)">监视</div>
+      <div class="debug-tab" onclick="switchDebugTab('output', this)">输出</div>
+    </div>
+    <!-- 调试内容区 -->
+    <div class="debug-content">
+      <!-- 变量面板 -->
+      <div class="debug-section active" id="debugSectionVariables">
+        <div class="debug-var-group">
+          <div class="debug-var-group-header">局部变量</div>
+          <div id="debugLocalVars"><div class="debug-empty">无调试会话</div></div>
+        </div>
+        <div class="debug-var-group">
+          <div class="debug-var-group-header">全局变量</div>
+          <div id="debugGlobalVars"><div class="debug-empty">无调试会话</div></div>
+        </div>
+      </div>
+      <!-- 调用栈面板 -->
+      <div class="debug-section" id="debugSectionStack">
+        <div id="debugStackList"><div class="debug-empty">无调用栈信息</div></div>
+      </div>
+      <!-- 断点面板 -->
+      <div class="debug-section" id="debugSectionBreakpoints">
+        <div id="debugBpList"><div class="debug-empty">无断点</div></div>
+      </div>
+      <!-- 监视面板 -->
+      <div class="debug-section" id="debugSectionWatch">
+        <input type="text" class="debug-watch-input" id="debugWatchInput" placeholder="输入表达式并按 Enter 添加监视..." onkeydown="if(event.key==='Enter')addWatchExpr()">
+        <div id="debugWatchList"></div>
+      </div>
+      <!-- 输出面板 -->
+      <div class="debug-section" id="debugSectionOutput">
+        <div id="debugOutputList" class="debug-output"></div>
+      </div>
+    </div>
+  </div>
+
+
+
+<!-- ★ v4.7.13: 通知中心面板 -->
+<div class="notification-panel" id="notificationPanel" style="display:none;">
+  <div class="notification-panel-header">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+    <span>通知中心</span>
+    <button class="notification-panel-close" onclick="closeNotificationPanel()">×</button>
+  </div>
+  <div class="notification-panel-body" id="notificationList">
+    <div class="notification-empty">
+      <div class="notification-empty-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>
+      <div class="notification-empty-text">暂无新通知</div>
+      <div class="notification-empty-sub">当 Agent 完成重要任务、文件变更、新会话时，会在此通知你</div>
+    </div>
+  </div>
+  <div class="notification-panel-footer">
+    <button class="notification-clear-btn" onclick="clearAllNotifications()">全部标为已读</button>
+    <button class="notification-settings-btn" onclick="openSettings();closeNotificationPanel();">通知设置</button>
+  </div>
+</div>
+
+  <!-- ★ P11: 消息搜索面板 -->
+  <div class="search-overlay" id="searchOverlay">
+    <div class="search-panel">
+      <div class="search-header">
+        <input type="text" class="search-input" id="searchInput" placeholder="搜索消息内容..." data-i18n="search.placeholder" oninput="_doSearch(this.value)" autofocus>
+        <button class="search-close-btn" onclick="_closeSearchPanel()">×</button>
+      </div>
+      <div class="search-filter-row">
+        <span class="search-filter-label">会话:</span>
+        <select class="search-filter-select" id="searchSessionFilter" onchange="_doSearch()">
+          <option value="all">全部会话</option>
+        </select>
+        <span class="search-filter-label">类型:</span>
+        <select class="search-filter-select" id="searchTypeFilter" onchange="_doSearch()">
+          <option value="all">全部</option>
+          <option value="user">用户消息</option>
+          <option value="ai">AI回复</option>
+        </select>
+        <span class="search-result-count" id="searchResultCount"></span>
+      </div>
+      <div class="search-results" id="searchResults">
+        <div class="search-empty" data-i18n="search.empty">输入关键词开始搜索...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ★ P11: 快捷键帮助面板 -->
+  <div class="shortcuts-overlay" id="shortcutsOverlay">
+    <div class="shortcuts-panel">
+      <div class="shortcuts-header">
+        <span data-i18n="shortcuts.title">快捷键参考</span>
+        <button class="search-close-btn" onclick="_closeShortcutsHelp()">×</button>
+      </div>
+      <div class="shortcuts-list" id="shortcutsList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ★ ★ 柠檬小助手已移动到输入区第二行工具栏（.input-toolbar-row） -->
+
+<!-- 机器人语音气泡 -->
+<div class="robot-bubble" id="robotBubble"></div>
+
+<!-- 右键聊天框 -->
+<div class="robot-chat" id="robotChat">
+  <div class="robot-chat-header" id="chatHeader">
+    <div class="chat-title"><div class="chat-title-dot"></div><span data-i18n="robot.chatTitle">柠檬助手</span></div>
+    <button class="chat-close" onclick="closeRobotChat()">✕</button>
+  </div>
+  <div class="robot-chat-messages" id="chatMessages"></div>
+  <div class="robot-chat-input">
+    <input type="text" id="chatInput" placeholder="和柠檬小助手说点什么..." data-i18n="robot.inputPlaceholder" onkeydown="if(event.key==='Enter')sendChatMsg()">
+    <button onclick="sendChatMsg()" data-i18n="robot.send">发送</button>
+  </div>
+</div>
+
+<!-- ★ ★ 时间部件已移动到输入区第二行工具栏（.input-toolbar-row） -->
+
+<!-- ===== 配置选项面板（交互式） ===== -->
+<div class="config-overlay" id="configOverlay">
+  <div class="config-panel" id="configPanel">
+    <h3 id="configTitle" data-i18n="config.title">配置选项</h3>
+    <div class="config-desc" id="configDesc" data-i18n="config.desc">请选择以下配置项</div>
+    <div id="configOptionsContainer"></div>
+    <div class="config-btns">
+      <button class="config-btn config-btn-secondary" onclick="closeConfigPanel()" data-i18n="config.cancel">取消</button>
+      <button class="config-btn config-btn-primary" onclick="applyConfigOptions()" data-i18n="config.confirm">确认</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 权限请求弹窗 ===== -->
+<div class="permission-overlay" id="permissionOverlay">
+  <div class="permission-panel" id="permissionPanel">
+    <h3><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#f5c542" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 权限请求</h3>
+    <div class="perm-tool" id="permTool">工具: unknown</div>
+    <div class="perm-desc" id="permDesc">Lemon Code 请求执行操作</div>
+    <div class="permission-options" id="permOptions"></div>
+  </div>
+</div>
+
+<!-- ===== 模式选择面板 ===== -->
+<div class="mode-panel" id="modePanel">
+  <h4 data-i18n="mode.switchTitle">切换工作模式</h4>
+  <div id="modeList"></div>
+  <div class="mode-close" onclick="closeModePanel()" data-i18n="mode.cancelEsc">取消 (Esc)</div>
+</div>
+
+<!-- ===== 命令面板（侧边滑入） ===== -->
+<div class="cmd-overlay" id="cmdOverlay" onclick="closeCmdPanel()">
+  <div class="cmd-panel" onclick="event.stopPropagation()">
+    <button class="cmd-close" onclick="closeCmdPanel()">✕</button>
+    <h4>可用命令</h4>
+    <div id="cmdList"></div>
+  </div>
+</div>
+
+<!-- ===== 计划可视化 ===== -->
+<div class="plan-area" id="planArea">
+  <div class="plan-title">执行计划</div>
+  <div id="planList"></div>
+</div>
+
+<!-- ===== 模型选择面板 ===== -->
+<div class="mode-panel" id="modelPanel">
+  <h4>切换模型</h4>
+  <div id="modelList"></div>
+  <div class="mode-close" onclick="closeModelPanel()">取消 (Esc)</div>
+</div>
+
+<!-- ===== 会话管理面板 ===== -->
+<div class="mode-panel" id="sessionPanel">
+  <h4 data-i18n="session.title">会话管理</h4>
+  <div id="sessionList"></div>
+  <div style="display:flex;gap:8px;justify-content:center;margin-top:12px;">
+    <button class="config-btn config-btn-primary" onclick="createNewSession()" style="font-size:11px;padding:6px 14px;" data-i18n="session.new">+ 新建会话</button>
+    <button class="config-btn config-btn-secondary" onclick="closeSessionPanel()" style="font-size:11px;padding:6px 14px;" data-i18n="session.cancel">取消</button>
+  </div>
+</div>
+
+
+
+<!-- ★ 回退确认对话框 -->
+<div class="snapshot-modal-overlay" id="snapshotModalOverlay">
+  <div class="snapshot-modal">
+    <div class="snapshot-modal-header" id="snapshotModalTitle" data-i18n="snapshot.title">↩ 代码回退确认</div>
+    <div class="snapshot-modal-body">
+      <pre id="snapshotDiffPreview" data-i18n="snapshot.loading">加载中...</pre>
+    </div>
+    <div class="snapshot-modal-footer">
+      <button class="snapshot-modal-btn cancel" onclick="closeSnapshotModal()" data-i18n="snapshot.cancel">取消</button>
+      <button class="snapshot-modal-btn confirm" id="snapshotConfirmBtn" onclick="confirmSnapshotRestore()" data-i18n="snapshot.confirm">确认回退</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== ★ 自定义确认对话框 ===== -->
+<div class="confirm-overlay" id="confirmOverlay">
+  <div class="confirm-dialog">
+    <div class="confirm-icon" id="confirmIcon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f5c542" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+    <div class="confirm-title" id="confirmTitle" data-i18n="confirm.title">确认操作</div>
+    <div class="confirm-message" id="confirmMessage" data-i18n="confirm.message">确定要执行此操作吗？</div>
+    <div class="confirm-actions">
+      <button class="confirm-btn cancel" id="confirmCancelBtn" onclick="_confirmCancel()" data-i18n="confirm.cancel">取消</button>
+      <button class="confirm-btn danger" id="confirmOkBtn" onclick="_confirmOk()" data-i18n="confirm.ok">确认</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== ★ 自定义输入对话框 ===== -->
+<div class="confirm-overlay" id="inputOverlay">
+  <div class="confirm-dialog">
+    <div class="confirm-icon" id="inputIcon">✏</div>
+    <div class="confirm-title" id="inputTitle">请输入</div>
+    <div class="confirm-message" id="inputMessage"></div>
+    <input type="text" class="input-dialog-field" id="inputDialogField" onkeydown="if(event.key==='Enter')_inputOk()">
+    <div class="confirm-actions">
+      <button class="confirm-btn cancel" onclick="_inputCancel()">取消</button>
+      <button class="confirm-btn danger" onclick="_inputOk()">确定</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- ===== 设置面板 ===== -->
+<!-- ============================================================ -->
+<div class="settings-overlay" id="settingsOverlay">
+  <div class="settings-panel">
+    <!-- 头部 -->
+    <div class="settings-header">
+      <div class="settings-title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-color)"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        设置
+      </div>
+      <button class="settings-close" onclick="closeSettings()">✕</button>
+    </div>
+
+    <!-- 标签栏 -->
+    <div class="settings-tabs">
+      <button class="settings-tab active" data-tab="general" onclick="switchSettingsTab('general')" data-i18n="settings.tabGeneral">通用</button>
+      <button class="settings-tab" data-tab="ai" onclick="switchSettingsTab('ai')" data-i18n="settings.tabAi">AI</button>
+      <button class="settings-tab" data-tab="appearance" onclick="switchSettingsTab('appearance')" data-i18n="settings.tabAppearance">外观</button>
+      <button class="settings-tab" data-tab="visualization" onclick="switchSettingsTab('visualization')" data-i18n="settings.tabVisualization">可视化</button>
+      <button class="settings-tab" data-tab="shortcuts" onclick="switchSettingsTab('shortcuts')" data-i18n="settings.tabShortcuts">快捷键</button>
+      <button class="settings-tab" data-tab="skin" onclick="switchSettingsTab('skin')" data-i18n="settings.tabSkin">皮肤</button>
+      <button class="settings-tab" data-tab="agent" onclick="switchSettingsTab('agent')" data-i18n="settings.tabAgent">Agent</button>
+      <button class="settings-tab" data-tab="apikey" onclick="switchSettingsTab('apikey')" data-i18n="settings.tabApikey">密钥</button>
+      <button class="settings-tab" data-tab="about" onclick="switchSettingsTab('about')" data-i18n="settings.tabAbout">关于</button>
+    </div>
+
+    <!-- 内容区 -->
+    <div class="settings-body">
+
+      <!-- ===== 通用设置 ===== -->
+      <div class="settings-section active" data-section="general">
+        <div class="setting-row">
+          <div class="setting-label">
+            语言
+            <span class="setting-desc">界面显示语言</span>
+          </div>
+          <div class="setting-control">
+            <select class="setting-select" id="set-language">
+              <option value="zh">中文</option>
+              <option value="en">English</option>
+            </select>
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label">
+            <span data-i18n="settings.reopenLast">启动时打开上次会话</span>
+            <span class="setting-desc" data-i18n="settings.reopenDesc">自动恢复上次的对话</span>
+          </div>
+          <div class="setting-control">
+            <button class="setting-toggle" id="set-reopen" onclick="toggleSetting(this)"></button>
+          </div>
+        </div>
+
+        <!-- ★ 沙箱模式设置 -->
+        <div class="setting-row">
+          <div class="setting-label">
+            沙箱模式
+            <span class="setting-desc">代码执行安全级别</span>
+          </div>
+          <div class="setting-control">
+            <select class="setting-select" id="set-sandbox-mode" onchange="_setSandboxMode(this.value)">
+              <option value="trust">信任模式（无确认）</option>
+              <option value="manual" selected>手动确认（危险语言需确认）</option>
+              <option value="strict">严格模式（禁止危险语言）</option>
+            </select>
+          </div>
+        </div>
+        <div class="setting-hint" style="margin:-8px 0 8px 0;font-size:11px;color:rgba(255,255,255,0.4);line-height:1.5;">
+          <strong>信任模式:</strong> 所有代码自动执行<br>
+          <strong>手动确认:</strong> C/C++/Bash等危险语言需确认<br>
+          <strong>严格模式:</strong> 禁止执行编译型/系统语言
+        </div>
+
+        <!-- ★ 支持的语言列表 -->
+        <div class="setting-row">
+          <div class="setting-label">
+            支持的执行语言
+            <span class="setting-desc">可在代码块中运行</span>
+          </div>
+          <div class="setting-control" style="flex-direction:column;align-items:flex-start;gap:6px;">
+            <div style="display:flex;flex-wrap:wrap;gap:4px;">
+              <span style="padding:2px 8px;background:rgba(76,175,80,0.2);border-radius:4px;font-size:11px;color:#66bb6a;">Python</span>
+              <span style="padding:2px 8px;background:rgba(76,175,80,0.2);border-radius:4px;font-size:11px;color:#66bb6a;">JavaScript</span>
+              <span style="padding:2px 8px;background:rgba(76,175,80,0.2);border-radius:4px;font-size:11px;color:#66bb6a;">TypeScript</span>
+              <span style="padding:2px 8px;background:rgba(255,193,7,0.2);border-radius:4px;font-size:11px;color:#ffc107;">C</span>
+              <span style="padding:2px 8px;background:rgba(255,193,7,0.2);border-radius:4px;font-size:11px;color:#ffc107;">C++</span>
+              <span style="padding:2px 8px;background:rgba(255,193,7,0.2);border-radius:4px;font-size:11px;color:#ffc107;">Java</span>
+              <span style="padding:2px 8px;background:rgba(255,193,7,0.2);border-radius:4px;font-size:11px;color:#ffc107;">Go</span>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:4px;">
+              <span style="padding:2px 8px;background:rgba(255,152,0,0.2);border-radius:4px;font-size:11px;color:#ff9800;">Bash</span>
+              <span style="padding:2px 8px;background:rgba(255,152,0,0.2);border-radius:4px;font-size:11px;color:#ff9800;">PowerShell</span>
+              <span style="padding:2px 8px;background:rgba(66,165,245,0.2);border-radius:4px;font-size:11px;color:#42a5f5;">HTML预览</span>
+              <span style="padding:2px 8px;background:rgba(66,165,245,0.2);border-radius:4px;font-size:11px;color:#42a5f5;">Ruby</span>
+              <span style="padding:2px 8px;background:rgba(66,165,245,0.2);border-radius:4px;font-size:11px;color:#42a5f5;">PHP</span>
+              <span style="padding:2px 8px;background:rgba(66,165,245,0.2);border-radius:4px;font-size:11px;color:#42a5f5;">Lua</span>
+              <span style="padding:2px 8px;background:rgba(66,165,245,0.2);border-radius:4px;font-size:11px;color:#42a5f5;">R</span>
+            </div>
+            <div style="font-size:10px;color:rgba(255,255,255,0.35);margin-top:2px;">
+              <span style="color:#4caf50;">&#9679;</span> 解释型 | <span style="color:#ffc107;">&#9679;</span> 编译型 | <span style="color:#ff9800;">&#9679;</span> 系统语言 | <span style="color:#42a5f5;">&#9679;</span> 其他
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== AI 设置 ===== -->
+      <div class="settings-section" data-section="ai">
+        <div class="setting-row">
+          <div class="setting-label">
+            AI 模型
+            <span class="setting-desc">选择 AI 后端服务</span>
+          </div>
+          <div class="setting-control">
+            <select class="setting-select" id="set-model" onchange="onSetModelChange(this.value)">
+              <option value="auto">自动选择</option>
+              <option value="ollama">本地 Ollama</option>
+              <option value="mimo">远程 Lemon Code</option>
+            </select>
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label">
+            温度参数
+            <span class="setting-desc">0=精确, 1=创意, 默认 0.7</span>
+          </div>
+          <div class="setting-control">
+            <input type="range" class="setting-slider" id="set-temperature" min="0" max="1" step="0.1" value="0.7" oninput="updateSliderValue(this, 'set-temperature-val')">
+            <span class="setting-slider-value" id="set-temperature-val">0.7</span>
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label">
+            最大 Token 数
+            <span class="setting-desc">AI 回复的最大长度</span>
+          </div>
+          <div class="setting-control">
+            <input type="range" class="setting-slider" id="set-max-tokens" min="512" max="8192" step="512" value="4096" oninput="updateSliderValue(this, 'set-max-tokens-val')">
+            <span class="setting-slider-value" id="set-max-tokens-val">4096</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== Agent 管理设置 ===== -->
+      <div class="settings-section" data-section="agent">
+        <div class="setting-section-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 0 1 4 4v2a4 4 0 0 1-8 0V6a4 4 0 0 1 4-4z"/><path d="M3 20v-2a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v2"/></svg>
+          Agent 模式
+          <span class="setting-desc" style="display:block;margin-top:2px;">选择 Agent 运行的引擎和身份</span>
+        </div>
+
+        <!-- Agent 身份选择 -->
+        <div class="setting-row">
+          <div class="setting-label">
+            Agent 身份
+            <span class="setting-desc">Lemon Agent = 本地AI驱动 / MIMO Agent = 夺舍MIMO Code</span>
+          </div>
+          <div class="setting-control">
+            <select class="setting-select" id="set-agent-identity" onchange="onAgentIdentityChange(this.value)">
+              <option value="auto">自动选择</option>
+              <option value="lemon">Lemon Agent (本地)</option>
+              <option value="mimo">MIMO Agent (夺舍)</option>
+            </select>
+          </div>
+        </div>
+        <div class="agent-identity-desc" id="agentIdentityDesc" style="margin:-8px 0 12px 0;padding:8px 12px;background:rgba(255,255,255,0.03);border-radius:8px;font-size:11px;color:rgba(255,255,255,0.5);line-height:1.5;">
+          <strong>Lemon Agent:</strong> 使用本地 Ollama 或 DeepSeek API 驱动，完全自主运行，不依赖 MIMO Code。<br>
+          <strong>MIMO Agent:</strong> 通过 Process Bridge 夺舍 MIMO Code 窗口，共享其 AI 能力和文件系统。
+        </div>
+
+        <!-- ★ v354 CodeBuddy 式模型中心：一个区块管「选模型 + 看状态 + 测连接」，
+             替换旧「当前模型/模型选择/算力引擎」三个职能重叠的区块 -->
+        <div class="setting-section-title" style="margin-top:16px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="3"/><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 15h3M20 9h3M20 15h3"/></svg>
+          模型
+          <span class="setting-desc" style="display:block;margin-top:2px;">云端 / 本地分组选择，状态实时可测</span>
+        </div>
+        <!-- 当前选中胶囊（CodeBuddy 底栏形态）：状态灯 + 引擎 · 模型名 -->
+        <div class="ms-current" id="msCurrentRow" onclick="toggleMsList()" title="点击展开/收起模型列表">
+          <span class="model-display-dot" id="settingsModelDot" style="position:static;"></span>
+          <span class="ms-current-name" id="settingsModelName">模型: 自动</span>
+          <span class="ms-current-caret">▾</span>
+        </div>
+        <!-- 分组模型列表（默认展开，CodeBuddy 设置页平铺形态） -->
+        <div class="ms-list" id="msList"></div>
+        <!-- 测试连接行 + 实时结果 -->
+        <div class="ms-testrow">
+          <button class="action-btn ms-test-btn" onclick="testEngineLatency()">🔗 测试连接</button>
+          <span class="mp-conn-result" id="mpConnResult2">未测试（云端 / 本地）</span>
+        </div>
+        <!-- 默认引擎（新建对话时的调度策略）并入此区块 -->
+        <div class="setting-row" style="margin-top:6px;">
+          <div class="setting-label">
+            默认引擎
+            <span class="setting-desc">新建对话时自动调度的引擎</span>
+          </div>
+          <div class="setting-control">
+            <select class="setting-select" id="set-default-engine">
+              <option value="auto">自动选择</option>
+              <option value="ollama">Ollama 本地</option>
+              <option value="deepseek">DeepSeek API</option>
+              <option value="mimo">MIMO Code</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- DeepSeek API 配置 -->
+        <div class="setting-section-title" style="margin-top:16px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          API 密钥配置
+          <span class="setting-desc" style="display:block;margin-top:2px;">配置云端 API 的访问密钥</span>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label">
+            DeepSeek API Key
+            <span class="setting-desc">用于访问 DeepSeek 云端模型</span>
+          </div>
+          <div class="setting-control" style="flex:1;">
+            <input type="password" class="setting-input" id="set-deepseek-key" placeholder="sk-xxxxxxxxxxxxxxxx" style="width:100%;padding:6px 10px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:rgba(255,255,255,0.8);font-size:12px;outline:none;">
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label">
+            API Endpoint
+            <span class="setting-desc">自定义 API 地址（可选）</span>
+          </div>
+          <div class="setting-control" style="flex:1;">
+            <input type="text" class="setting-input" id="set-api-endpoint" placeholder="https://api.deepseek.com/v1" style="width:100%;padding:6px 10px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:rgba(255,255,255,0.8);font-size:12px;outline:none;">
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label">
+            连接测试
+            <span class="setting-desc">验证 DeepSeek API Key 与 Endpoint 是否可用</span>
+          </div>
+          <div class="setting-control">
+            <button class="action-btn" onclick="testApiConnection('deepseek')" style="padding:5px 14px;font-size:12px;background:rgba(255,105,0,0.12);border:1px solid rgba(255,105,0,0.25);border-radius:6px;color:#ff9a4a;cursor:pointer;">测试连接</button>
+            <span id="connTestStatus-deepseek" style="font-size:11px;color:rgba(255,255,255,0.5);margin-left:8px;"></span>
+          </div>
+        </div>
+
+        <!-- Ollama 本地模型配置 -->
+        <div class="setting-section-title" style="margin-top:16px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          本地模型
+          <span class="setting-desc" style="display:block;margin-top:2px;">Ollama 本地模型配置</span>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label">
+            默认模型
+            <span class="setting-desc">Ollama 使用的默认模型</span>
+          </div>
+          <div class="setting-control">
+            <select class="setting-select" id="set-ollama-model" onchange="onSetOllamaModelChange(this.value)">
+              <option value="qwen2.5:1.5b">qwen2.5:1.5b</option>
+              <option value="qwen3.5:4b">qwen3.5:4b</option>
+              <option value="llama3.2:3b">llama3.2:3b</option>
+              <option value="deepseek-r1:1.5b">deepseek-r1:1.5b</option>
+              <option value="custom">自定义...</option>
+            </select>
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label">
+            Ollama 地址
+            <span class="setting-desc">Ollama 服务地址</span>
+          </div>
+          <div class="setting-control" style="flex:1;">
+            <input type="text" class="setting-input" id="set-ollama-host" value="http://localhost:11434" style="width:100%;padding:6px 10px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:rgba(255,255,255,0.8);font-size:12px;outline:none;">
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label">
+            连接测试
+            <span class="setting-desc">验证 Ollama 本地服务是否在线</span>
+          </div>
+          <div class="setting-control">
+            <button class="action-btn" onclick="testApiConnection('ollama')" style="padding:5px 14px;font-size:12px;background:rgba(255,105,0,0.12);border:1px solid rgba(255,105,0,0.25);border-radius:6px;color:#ff9a4a;cursor:pointer;">测试连接</button>
+            <span id="connTestStatus-ollama" style="font-size:11px;color:rgba(255,255,255,0.5);margin-left:8px;"></span>
+          </div>
+        </div>
+
+        <!-- 混合模式 -->
+        <div class="setting-section-title" style="margin-top:16px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          混合模式
+          <span class="setting-desc" style="display:block;margin-top:2px;">多引擎协同工作配置</span>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label">
+            启用混合模式
+            <span class="setting-desc">同时使用多个引擎协同工作</span>
+          </div>
+          <div class="setting-control">
+            <button class="setting-toggle" id="set-hybrid-mode" onclick="toggleSetting(this)"></button>
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label">
+            智能路由
+            <span class="setting-desc">根据任务复杂度自动选择引擎</span>
+          </div>
+          <div class="setting-control">
+            <button class="setting-toggle active" id="set-smart-route" onclick="toggleSetting(this)"></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== API 密钥设置 ===== -->
+      <div class="settings-section" data-section="apikey">
+        <div class="settings-section-title">API 密钥</div>
+        <div class="settings-item">
+          <label>DeepSeek API Key</label>
+          <div style="display:flex;gap:8px;">
+            <input type="password" id="deepseekApiKeyInput" placeholder="sk-..." 
+                   style="flex:1;background:#1a1a2e;border:1px solid #333;color:#fff;padding:6px 10px;border-radius:4px;font-size:12px;">
+            <button onclick="saveDeepSeekApiKey()" 
+                    style="background:#ff6900;color:#fff;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;font-size:12px;">保存</button>
+          </div>
+          <div style="font-size:10px;color:#666;margin-top:4px;">密钥保存在本地 ~/.deepseek_key，不会上传</div>
+        </div>
+        <div class="settings-item">
+          <label>MiMo API Key</label>
+          <div style="display:flex;gap:8px;">
+            <input type="password" id="mimoApiKeyInput" placeholder="mimo-..." 
+                   style="flex:1;background:#1a1a2e;border:1px solid #333;color:#fff;padding:6px 10px;border-radius:4px;font-size:12px;">
+            <button onclick="saveMiMoApiKey()" 
+                    style="background:#ff6900;color:#fff;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;font-size:12px;">保存</button>
+          </div>
+          <div style="font-size:10px;color:#666;margin-top:4px;">密钥保存在本地 ~/.mimo_key，不会上传</div>
+        </div>
+
+        <!-- ★ 自定义 API 请求格式 -->
+        <div style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.08);">
+          <div class="settings-section-title" style="margin-bottom:12px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:4px;color:var(--accent-color);"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            自定义 API 格式
+            <span class="setting-desc" style="display:block;margin-top:2px;">为不同引擎配置请求格式模板</span>
+          </div>
+
+          <!-- 引擎选择 -->
+          <div class="settings-item" style="margin-bottom:8px;">
+            <label style="font-size:11px;color:rgba(255,255,255,0.6);">选择引擎</label>
+            <select id="apiFormatEngine" onchange="_loadApiFormat(this.value)" 
+                    style="width:100%;background:#1a1a2e;border:1px solid #333;color:#fff;padding:6px 10px;border-radius:4px;font-size:12px;margin-top:4px;">
+              <option value="ollama">Ollama (本地)</option>
+              <option value="deepseek">DeepSeek API</option>
+              <option value="mimo">MIMO Code</option>
+              <option value="custom">自定义 OpenAI 兼容</option>
+            </select>
+          </div>
+
+          <!-- API 端点 -->
+          <div class="settings-item" style="margin-bottom:8px;">
+            <label style="font-size:11px;color:rgba(255,255,255,0.6);">API 端点</label>
+            <input type="text" id="apiFormatEndpoint" placeholder="http://localhost:11434/api/chat" 
+                   style="width:100%;background:#1a1a2e;border:1px solid #333;color:#fff;padding:6px 10px;border-radius:4px;font-size:12px;margin-top:4px;font-family:Consolas,monospace;">
+          </div>
+
+          <!-- 请求体模板 -->
+          <div class="settings-item" style="margin-bottom:8px;">
+            <label style="font-size:11px;color:rgba(255,255,255,0.6);">请求体模板 <span style="color:#666;">(用 {{prompt}} 和 {{model}} 占位)</span></label>
+            <textarea id="apiFormatBody" rows="6" 
+                      style="width:100%;background:#1a1a2e;border:1px solid #333;color:#fff;padding:8px 10px;border-radius:4px;font-size:11px;margin-top:4px;font-family:Consolas,monospace;resize:vertical;line-height:1.4;"
+                      placeholder='{"model":"{{model}}","messages":[{"role":"user","content":"{{prompt}}"}],"stream":true}'></textarea>
+          </div>
+
+          <!-- 自定义请求头 -->
+          <div class="settings-item" style="margin-bottom:12px;">
+            <label style="font-size:11px;color:rgba(255,255,255,0.6);">自定义请求头 <span style="color:#666;">(JSON 格式)</span></label>
+            <textarea id="apiFormatHeaders" rows="3" 
+                      style="width:100%;background:#1a1a2e;border:1px solid #333;color:#fff;padding:8px 10px;border-radius:4px;font-size:11px;margin-top:4px;font-family:Consolas,monospace;resize:vertical;line-height:1.4;"
+                      placeholder='{"Authorization":"Bearer sk-xxx","Content-Type":"application/json"}'></textarea>
+          </div>
+
+          <div style="display:flex;gap:8px;">
+            <button onclick="_saveApiFormat()" 
+                    style="flex:1;background:#ff6900;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px;">保存格式</button>
+            <button onclick="_resetApiFormat()" 
+                    style="flex:1;background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.6);border:1px solid #333;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px;">重置默认</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== 外观设置 ===== -->
+      <div class="settings-section" data-section="appearance">
+        <div class="setting-row" style="flex-direction:column;align-items:stretch;">
+          <div class="setting-label" style="margin-bottom:8px;">
+            主题
+            <span class="setting-desc">选择界面配色方案</span>
+          </div>
+          <div class="theme-cards" id="themeCards">
+            <div class="theme-card" data-theme="lemon" onclick="selectTheme('lemon')">
+              <div class="theme-card-preview" style="background:linear-gradient(135deg,#fff9c4 0%,#fff59d 50%,#ffee58 100%);"></div>
+              <div class="theme-card-name">🍋 Lemon风格</div>
+            </div>
+            <div class="theme-card" data-theme="cyber" onclick="selectTheme('cyber')">
+              <div class="theme-card-preview" style="background:linear-gradient(135deg,#000 0%,#0a0a14 50%,#ff6900 100%);"></div>
+              <div class="theme-card-name">小米桌面风</div>
+            </div>
+            <div class="theme-card" data-theme="dark" onclick="selectTheme('dark')">
+              <div class="theme-card-preview" style="background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#4a9eff 100%);"></div>
+              <div class="theme-card-name">标准暗色</div>
+            </div>
+            <div class="theme-card" data-theme="light" onclick="selectTheme('light')">
+              <div class="theme-card-preview" style="background:linear-gradient(135deg,#f5f5f5 0%,#e0e0e0 50%,#e55a00 100%);"></div>
+              <div class="theme-card-name">亮色</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-label">
+            字体大小
+            <span class="setting-desc">界面文字大小 (px)</span>
+          </div>
+          <div class="setting-control">
+            <input type="range" class="setting-slider" id="set-font-size" min="11" max="20" step="1" value="14" oninput="updateSliderValue(this, 'set-font-size-val')">
+            <span class="setting-slider-value" id="set-font-size-val">14</span>
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label">
+            代码字体
+            <span class="setting-desc">代码块字体</span>
+          </div>
+          <div class="setting-control">
+            <select class="setting-select" id="set-code-font">
+              <option value="Consolas">Consolas</option>
+              <option value="Courier New">Courier New</option>
+              <option value="Monaco">Monaco</option>
+              <option value="Menlo">Menlo</option>
+              <option value="monospace">系统默认</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== 可视化设置 ===== -->
+      <div class="settings-section" data-section="visualization">
+        <div class="setting-row">
+          <div class="setting-label">
+            默认图表风格
+            <span class="setting-desc">统计图渲染样式</span>
+          </div>
+          <div class="setting-control">
+            <select class="setting-select" id="set-chart-style">
+              <option value="neon">霓虹赛博</option>
+              <option value="plain">简洁朴素</option>
+            </select>
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label">
+            3D 渲染质量
+            <span class="setting-desc">几何体渲染精度</span>
+          </div>
+          <div class="setting-control">
+            <select class="setting-select" id="set-render-quality">
+              <option value="high">高质量</option>
+              <option value="medium">中等</option>
+              <option value="low">低质量（省电）</option>
+            </select>
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label">
+            动画效果
+            <span class="setting-desc">启用星空、流星等动画</span>
+          </div>
+          <div class="setting-control">
+            <button class="setting-toggle on" id="set-animation" onclick="toggleSetting(this)"></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== ★ v4.1.9: 模式开关（两键 NATIVE / HOST，英文大写美观） ===== -->
+      <div class="settings-section" data-section="mode_switches">
+        <div class="section-title">模式开关  Mode Switches</div>
+        <div class="section-desc">顶部标题栏的两段算力路径开关。关闭后该模式段不可切换，自动降级到 NATIVE 段。</div>
+
+        <div class="setting-row" style="align-items:center;">
+          <div class="setting-label">
+            <span style="font-weight:700;color:#3498db;font-size:14px;letter-spacing:0.5px;">NATIVE</span>
+            <span style="color:#7b8a9a;font-size:11px;margin-left:8px;">Native Agent</span>
+            <div class="setting-desc" style="margin-top:2px;">LemonCode 本体 Agent（自研引擎栈：Ollama / DeepSeek / 本地模型）</div>
+          </div>
+          <div class="setting-control">
+            <button class="setting-toggle on" id="set-native-agent" onclick="toggleSetting(this)"></button>
+          </div>
+        </div>
+
+        <div class="setting-row" style="align-items:center;">
+          <div class="setting-label">
+            <span style="font-weight:700;color:#9b59b6;font-size:14px;letter-spacing:0.5px;">HOST</span>
+            <span style="color:#7b8a9a;font-size:11px;margin-left:8px;">Host Agent</span>
+            <div class="setting-desc" style="margin-top:2px;">外部 Agent 夺舍（连接 MiMo Code / Aider / OpenCode / ...）</div>
+          </div>
+          <div class="setting-control">
+            <button class="setting-toggle on" id="set-host-agent" onclick="toggleSetting(this)"></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== ★ v4.1.12: NATIVE 模式专属配置 ===== -->
+      <div class="settings-section" data-section="mode_native">
+        <div class="section-title" style="color:#3498db;">NATIVE 专属配置  Native Agent</div>
+        <div class="section-desc">LemonCode 本体 Agent 的工具权限与智能开关（仅 NATIVE 段生效）。</div>
+
+        <!-- 工具权限 -->
+        <div class="setting-row" style="align-items:center;">
+          <div class="setting-label">
+            <span>文件写入权限</span>
+            <div class="setting-desc" style="margin-top:2px;">允许 Agent 直接创建 / 修改 / 删除文件</div>
+          </div>
+          <div class="setting-control">
+            <button class="setting-toggle on" id="set-native-tool-file" onclick="toggleSetting(this)"></button>
+          </div>
+        </div>
+        <div class="setting-row" style="align-items:center;">
+          <div class="setting-label">
+            <span>终端命令权限</span>
+            <div class="setting-desc" style="margin-top:2px;">允许 Agent 执行终端命令（git / 运行 / 构建）</div>
+          </div>
+          <div class="setting-control">
+            <button class="setting-toggle on" id="set-native-tool-term" onclick="toggleSetting(this)"></button>
+          </div>
+        </div>
+        <div class="setting-row" style="align-items:center;">
+          <div class="setting-label">
+            <span>联网搜索</span>
+            <div class="setting-desc" style="margin-top:2px;">允许 Agent 联网搜索资料（默认关闭，保护隐私）</div>
+          </div>
+          <div class="setting-control">
+            <button class="setting-toggle" id="set-native-tool-web" onclick="toggleSetting(this)"></button>
+          </div>
+        </div>
+        <div class="setting-row" style="align-items:center;">
+          <div class="setting-label">
+            <span>自动代码审查</span>
+            <div class="setting-desc" style="margin-top:2px;">代码提交 / 保存后自动做代码审查</div>
+          </div>
+          <div class="setting-control">
+            <button class="setting-toggle" id="set-native-review" onclick="toggleSetting(this)"></button>
+          </div>
+        </div>
+        <div class="setting-row" style="align-items:center;">
+          <div class="setting-label">
+            <span>会话记忆</span>
+            <div class="setting-desc" style="margin-top:2px;">跨会话记住上下文与历史摘要</div>
+          </div>
+          <div class="setting-control">
+            <button class="setting-toggle on" id="set-native-memory" onclick="toggleSetting(this)"></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== ★ v4.1.12: HOST 模式专属配置 ===== -->
+      <div class="settings-section" data-section="mode_host">
+        <div class="section-title" style="color:#9b59b6;">HOST 专属配置  Host Agent</div>
+        <div class="section-desc">外部 Agent 夺舍的连接与输出处理开关（仅 HOST 段生效）。</div>
+
+        <!-- 默认夺舍 Agent -->
+        <div class="setting-row" style="align-items:center;">
+          <div class="setting-label">
+            <span>默认夺舍 Agent</span>
+            <div class="setting-desc" style="margin-top:2px;">进入 HOST 段时默认连接的 Agent</div>
+          </div>
+          <div class="setting-control">
+            <select class="settings-select" id="set-host-default-agent" style="background:#2a2a3e;color:#e0e0e0;border:1px solid #9b59b6;border-radius:4px;padding:4px 8px;">
+              <option value="mimo_code">MiMo Code</option>
+              <option value="claude_code">Claude Code</option>
+              <option value="codex">Codex</option>
+              <option value="aider">Aider</option>
+              <option value="opencode">OpenCode</option>
+              <option value="generic_acp">通用 ACP</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- 连接超时 -->
+        <div class="setting-row" style="align-items:center;">
+          <div class="setting-label">
+            <span>连接超时</span>
+            <div class="setting-desc" style="margin-top:2px;">夺舍连接等待时长</div>
+          </div>
+          <div class="setting-control" style="align-items:center;gap:8px;">
+            <input type="range" id="set-host-timeout" min="10" max="120" step="5" value="30" oninput="document.getElementById('set-host-timeout-val').textContent=this.value+'s'">
+            <span id="set-host-timeout-val" style="color:#e0e0e0;font-size:12px;width:30px;">30s</span>
+          </div>
+        </div>
+
+        <!-- 拦截输出 -->
+        <div class="setting-row" style="align-items:center;">
+          <div class="setting-label">
+            <span>拦截外部输出</span>
+            <div class="setting-desc" style="margin-top:2px;">假终端拦截并显示外部 Agent 输出</div>
+          </div>
+          <div class="setting-control">
+            <button class="setting-toggle on" id="set-host-intercept" onclick="toggleSetting(this)"></button>
+          </div>
+        </div>
+
+        <!-- 二次处理 -->
+        <div class="setting-row" style="align-items:center;">
+          <div class="setting-label">
+            <span>二次处理</span>
+            <div class="setting-desc" style="margin-top:2px;">右栏显示模式对拦截输出做二次处理</div>
+          </div>
+          <div class="setting-control">
+            <button class="setting-toggle on" id="set-host-reprocess" onclick="toggleSetting(this)"></button>
+          </div>
+        </div>
+
+        <!-- 来源前缀 -->
+        <div class="setting-row" style="align-items:center;">
+          <div class="setting-label">
+            <span>显示来源前缀</span>
+            <div class="setting-desc" style="margin-top:2px;">[Agent] / [Tool] / [思考] 等来源标记</div>
+          </div>
+          <div class="setting-control">
+            <button class="setting-toggle on" id="set-host-prefix" onclick="toggleSetting(this)"></button>
+          </div>
+        </div>
+
+        <!-- 分色显示 -->
+        <div class="setting-row" style="align-items:center;">
+          <div class="setting-label">
+            <span>按来源分色</span>
+            <div class="setting-desc" style="margin-top:2px;">Agent 蓝 / Tool 橙 / 思考 紫 / 状态 绿</div>
+          </div>
+          <div class="setting-control">
+            <button class="setting-toggle on" id="set-host-color" onclick="toggleSetting(this)"></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== 快捷键设置 ===== -->
+      <div class="settings-section" data-section="shortcuts">
+        <div class="shortcut-setting-row">
+          <span class="shortcut-setting-key">发送消息</span>
+          <input type="text" class="shortcut-setting-input" id="set-sc-send" value="Ctrl+Enter" readonly>
+        </div>
+        <div class="shortcut-setting-row">
+          <span class="shortcut-setting-key">新建会话</span>
+          <input type="text" class="shortcut-setting-input" id="set-sc-new" value="Ctrl+N" readonly>
+        </div>
+        <div class="shortcut-setting-row">
+          <span class="shortcut-setting-key">切换会话</span>
+          <input type="text" class="shortcut-setting-input" id="set-sc-switch" value="Ctrl+Tab" readonly>
+        </div>
+        <div class="shortcut-setting-row">
+          <span class="shortcut-setting-key">打开设置</span>
+          <input type="text" class="shortcut-setting-input" id="set-sc-settings" value="Ctrl+," readonly>
+        </div>
+        <div class="shortcut-setting-row">
+          <span class="shortcut-setting-key">清除输出</span>
+          <input type="text" class="shortcut-setting-input" id="set-sc-clear" value="Ctrl+L" readonly>
+        </div>
+        <div class="shortcut-setting-row">
+          <span class="shortcut-setting-key">命令面板</span>
+          <input type="text" class="shortcut-setting-input" id="set-sc-cmd" value="Ctrl+P" readonly>
+        </div>
+        <div style="margin-top:12px;font-size:11px;color:var(--text-muted);">
+          快捷键暂不支持自定义修改，将在后续版本开放
+        </div>
+      </div>
+
+      <!-- ===== ★ 皮肤调控设置 ===== -->
+      <div class="settings-section" data-section="skin">
+        <div class="setting-row">
+          <div class="setting-label">
+            节日主题
+            <span class="setting-desc">选择节日皮肤</span>
+          </div>
+        </div>
+
+        <!-- ★ 主题卡片网格 -->
+        <div class="theme-grid" id="themeGrid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:10px 0 20px;">
+          <!-- 默认 -->
+          <div class="theme-card" data-theme="default" onclick="applyFestivalTheme('default')">
+            <div class="theme-preview" style="background:linear-gradient(135deg,#ff6900,#ff9a4a);"></div>
+            <div class="theme-name">默认</div>
+          </div>
+          <!-- 圣诞节 -->
+          <div class="theme-card" data-theme="christmas" onclick="applyFestivalTheme('christmas')">
+            <div class="theme-preview" style="background:linear-gradient(135deg,#c41e3a,#22c55e);"></div>
+            <div class="theme-name">圣诞</div>
+          </div>
+          <!-- 万圣节 -->
+          <div class="theme-card" data-theme="halloween" onclick="applyFestivalTheme('halloween')">
+            <div class="theme-preview" style="background:linear-gradient(135deg,#ff6b00,#9333ea);"></div>
+            <div class="theme-name">万圣</div>
+          </div>
+          <!-- 春节 -->
+          <div class="theme-card" data-theme="cny" onclick="applyFestivalTheme('cny')">
+            <div class="theme-preview" style="background:linear-gradient(135deg,#dc2626,#ffd700);"></div>
+            <div class="theme-name">春节</div>
+          </div>
+          <!-- 新年 -->
+          <div class="theme-card" data-theme="newyear" onclick="applyFestivalTheme('newyear')">
+            <div class="theme-preview" style="background:linear-gradient(135deg,#0ea5e9,#ffd700);"></div>
+            <div class="theme-name">新年</div>
+          </div>
+          <!-- 情人节 -->
+          <div class="theme-card" data-theme="valentine" onclick="applyFestivalTheme('valentine')">
+            <div class="theme-preview" style="background:linear-gradient(135deg,#ec4899,#f472b6);"></div>
+            <div class="theme-name">情人节</div>
+          </div>
+          <!-- 复活节 -->
+          <div class="theme-card" data-theme="easter" onclick="applyFestivalTheme('easter')">
+            <div class="theme-preview" style="background:linear-gradient(135deg,#22c55e,#fde047);"></div>
+            <div class="theme-name">复活节</div>
+          </div>
+          <!-- 国庆 -->
+          <div class="theme-card" data-theme="national" onclick="applyFestivalTheme('national')">
+            <div class="theme-preview" style="background:linear-gradient(135deg,#dc2626,#fcd34d);"></div>
+            <div class="theme-name">国庆</div>
+          </div>
+          <!-- 星空 -->
+          <div class="theme-card" data-theme="space" onclick="applyFestivalTheme('space')">
+            <div class="theme-preview" style="background:linear-gradient(135deg,#8b5cf6,#06b6d4);"></div>
+            <div class="theme-name">星空</div>
+          </div>
+          <!-- 海洋 -->
+          <div class="theme-card" data-theme="ocean" onclick="applyFestivalTheme('ocean')">
+            <div class="theme-preview" style="background:linear-gradient(180deg,#0a1628 0%,#0d2847 40%,#1a4a6e 70%,#2d6e8e 100%);"></div>
+            <div class="theme-name">海洋</div>
+          </div>
+          <!-- ★ v4.0 专注时刻 — THE IMPACT 机械打字机 -->
+          <div class="theme-card" data-theme="focus_moment" onclick="applyFestivalTheme('focus_moment')">
+            <div class="theme-preview" style="background:linear-gradient(135deg,#070605 0%,#1a1614 55%,#b08d57 100%);"></div>
+            <div class="theme-name">专注时刻</div>
+          </div>
+        </div>
+
+        <!-- ★ 当前主题特效开关 -->
+        <div class="setting-row">
+          <div class="setting-label">
+            主题特效
+            <span class="setting-desc">雪花/南瓜/烟花等动画</span>
+          </div>
+          <div class="setting-control">
+            <button class="setting-toggle active" id="set-theme-effects" onclick="toggleSetting(this)"></button>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-label">
+            星空动画
+            <span class="setting-desc">右侧栏星空背景跟随主题</span>
+          </div>
+          <div class="setting-control">
+            <button class="setting-toggle active" id="set-starfield" onclick="toggleSetting(this)"></button>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-label">
+            机器人换装
+            <span class="setting-desc">小机器人颜色跟随主题</span>
+          </div>
+          <div class="setting-control">
+            <button class="setting-toggle active" id="set-robot-theme" onclick="toggleSetting(this)"></button>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-label">
+            自动节日
+            <span class="setting-desc">根据日期自动切换主题</span>
+          </div>
+          <div class="setting-control">
+            <button class="setting-toggle" id="set-auto-festival" onclick="toggleSetting(this)"></button>
+          </div>
+        </div>
+
+        <!-- ★ 海洋时段选择（仅在海洋主题下显示） -->
+        <div class="setting-row" id="oceanModeRow" style="display:none;">
+          <div class="setting-label">
+            海洋时段
+            <span class="setting-desc">白天 / 晚霞 / 夜晚</span>
+          </div>
+          <div class="setting-control">
+            <button class="theme-effect-btn" id="ocean-mode-day" onclick="setOceanMode('day')">白天</button>
+            <button class="theme-effect-btn" id="ocean-mode-sunset" onclick="setOceanMode('sunset')">晚霞</button>
+            <button class="theme-effect-btn" id="ocean-mode-night" onclick="setOceanMode('night')">夜晚</button>
+          </div>
+        </div>
+
+        <!-- ★ 特效预览 -->
+        <div style="margin-top:16px;padding:12px;background:rgba(255,255,255,0.03);border-radius:8px;">
+          <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:8px;">特效预览</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="theme-effect-btn" onclick="previewThemeEffect('snow')">雪花</button>
+            <button class="theme-effect-btn" onclick="previewThemeEffect('pumpkin')">南瓜</button>
+            <button class="theme-effect-btn" onclick="previewThemeEffect('firework')">烟花</button>
+            <button class="theme-effect-btn" onclick="previewThemeEffect('heart')">心形</button>
+            <button class="theme-effect-btn" onclick="previewThemeEffect('leaf')">落叶</button>
+            <button class="theme-effect-btn" onclick="previewThemeEffect('star')">⭐ 星星</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== 关于设置 ===== -->
+      <div class="settings-section" data-section="about">
+        <div class="about-logo" style="text-align:center;padding:20px 0 12px;">
+          <div style="font-size:36px;font-weight:700;color:var(--accent-color);letter-spacing:1px;">LEMON</div>
+          <div style="font-size:13px;color:var(--text-muted);margin-top:4px;">Visual Agent</div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label">
+            当前版本
+            <span class="setting-desc">应用程序版本号</span>
+          </div>
+          <div class="setting-control">
+            <span id="about-version" style="font-family:var(--code-font,Consolas);color:var(--accent-color);font-size:13px;">加载中...</span>
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label">
+            安装时间
+            <span class="setting-desc">首次安装日期</span>
+          </div>
+          <div class="setting-control">
+            <span id="about-installed" style="font-size:12px;color:var(--text-muted);">-</span>
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label">
+            上次检查
+            <span class="setting-desc">最近一次更新检查时间</span>
+          </div>
+          <div class="setting-control">
+            <span id="about-last-check" style="font-size:12px;color:var(--text-muted);">-</span>
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label">
+            更新通道
+            <span class="setting-desc">stable=稳定版 / beta=测试版</span>
+          </div>
+          <div class="setting-control">
+            <span id="about-channel" style="font-size:12px;color:var(--text-muted);">stable</span>
+          </div>
+        </div>
+        <div style="margin:16px 0 8px;display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="settings-save-btn" onclick="checkForUpdates(true)" style="flex:1;min-width:120px;">检查更新</button>
+          <button class="settings-reset-btn" onclick="showUpdateHistory()" style="flex:1;min-width:120px;">更新历史</button>
+        </div>
+        <div id="update-status-box" style="margin-top:12px;padding:10px 12px;border-radius:6px;font-size:12px;display:none;background:var(--bg-secondary,rgba(255,255,255,0.04));border:1px solid var(--border-color,rgba(255,255,255,0.08));">
+          <div id="update-status-text" style="color:var(--text-muted);">-</div>
+          <div id="update-action-row" style="margin-top:8px;display:none;gap:8px;">
+            <button class="settings-save-btn" onclick="performUpdate()" style="padding:4px 12px;font-size:11px;">立即更新</button>
+            <button class="settings-reset-btn" onclick="dismissUpdate()" style="padding:4px 12px;font-size:11px;">稍后提醒</button>
+          </div>
+        </div>
+        <div style="margin-top:20px;padding-top:12px;border-top:1px solid var(--border-color,rgba(255,255,255,0.08));font-size:11px;color:var(--text-muted);line-height:1.6;">
+          <div>Lemon Visual Agent — 基于 Lemon Code 的可视化 AI 代理框架</div>
+          <div style="margin-top:4px;">配置目录: ~/.mimo_agent/config/</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 底部按钮 -->
+    <div class="settings-footer">
+      <button class="settings-reset-btn" onclick="resetSettings()">恢复默认</button>
+      <button class="settings-save-btn" onclick="saveSettings()">保存</button>
+    </div>
+  </div>
+
+  </div>
+<!-- #content 结束 -->
+
+<!-- ===== 右上角服务模式切换器（借鉴 uh training 风格） ===== -->
+<div class="service-mode-switcher" id="serviceModeSwitcher">
+  <button class="svc-mode-btn" id="svcModeBtn" onclick="toggleServiceModeMenu()" title="切换服务模式">
+    <span class="svc-mode-icon" id="svcModeIcon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
+    <span class="svc-mode-label" id="svcModeLabel">单窗口</span>
+    <span class="svc-mode-arrow"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
+  </button>
+  <div class="svc-mode-menu" id="svcModeMenu">
+    <div class="svc-mode-item" data-mode="original" onclick="switchServiceMode('original')">
+      <span class="svc-mode-item-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5L12 3l9 6.5"/><path d="M5 9v11h5v-7h4v7h5V9"/></svg>
+      </span>
+      <div class="svc-mode-item-info">
+        <div class="svc-mode-item-name">原始界面</div>
+        <div class="svc-mode-item-desc">文件树+编辑器+AI面板，经典布局</div>
+      </div>
+    </div>
+    <div class="svc-mode-item active" data-mode="single" onclick="switchServiceMode('single')">
+      <span class="svc-mode-item-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      </span>
+      <div class="svc-mode-item-info">
+        <div class="svc-mode-item-name">单窗口模式</div>
+        <div class="svc-mode-item-desc">一个 Lemon Code，简单任务</div>
+      </div>
+    </div>
+    <div class="svc-mode-item" data-mode="multi" onclick="switchServiceMode('multi')">
+      <span class="svc-mode-item-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="8" height="7" rx="1.5"/><rect x="13" y="4" width="8" height="7" rx="1.5"/><rect x="3" y="13" width="8" height="7" rx="1.5"/><rect x="13" y="13" width="8" height="7" rx="1.5"/></svg>
+      </span>
+      <div class="svc-mode-item-info">
+        <div class="svc-mode-item-name">多窗口模式</div>
+        <div class="svc-mode-item-desc">多个 Lemon Code 并行协同</div>
+      </div>
+    </div>
+    <div class="svc-mode-item" data-mode="terminal" onclick="switchServiceMode('terminal')">
+      <span class="svc-mode-item-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 8 12 4 17"/><line x1="12" y1="17" x2="20" y2="17"/></svg>
+      </span>
+      <div class="svc-mode-item-info">
+        <div class="svc-mode-item-name">纯终端模式</div>
+        <div class="svc-mode-item-desc">专注编码，隐藏右侧面板</div>
+      </div>
+    </div>
+    <div class="svc-mode-item" data-mode="demo" onclick="switchServiceMode('demo')">
+      <span class="svc-mode-item-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none"/></svg>
+      </span>
+      <div class="svc-mode-item-info">
+        <div class="svc-mode-item-name">演示模式</div>
+        <div class="svc-mode-item-desc">可视化展示，隐藏终端</div>
+      </div>
+    </div>
+    <div class="svc-mode-item" data-mode="hybrid" onclick="switchServiceMode('hybrid')">
+      <span class="svc-mode-item-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="12" r="5"/><circle cx="15" cy="12" r="5"/></svg>
+      </span>
+      <div class="svc-mode-item-info">
+        <div class="svc-mode-item-name">混合 AI 模式</div>
+        <div class="svc-mode-item-desc">Lemon + Ollama 协同算力</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ★ 插件详情弹窗 -->
+<div class="plugin-detail-overlay" id="pluginDetailOverlay" onclick="if(event.target===this)closePluginDetail()">
+  <div class="plugin-detail-modal" id="pluginDetailModal">
+    <!-- 内容由 JS 动态渲染 -->
+  </div>
+</div>
+
+
+<script src="mimo_app.js?v=4.8.6-20260901-c360"></script>
+<script src="mimo_boot.js"></script>
+<!-- ★ LemonGaze 柠檬之瞳 · 右栏背景虚拟动态人物（独立 fixed 层，不依赖壁纸系统；
+     透明度由 JS 直接控制，避免内联样式覆盖 body.lemongaze-on） -->
+<canvas id="lemongazeEye" style="position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:6;opacity:0;transition:opacity .6s ease;pointer-events:none;display:block;"></canvas>
+<!-- ★ LemonGaze 柠檬之瞳 · 右栏背景虚拟动态人物（自包含，零外部依赖）
+     接口：window.lemonGazeSetActive(bool) / window.lemonGazeSetExpression(str)
+     状态存 localStorage，页面重载/多会话自动恢复。 -->
+<script>
+(function () {
+  // ★ v2 键：旧键 lemongazeActive 缺省默认开眼（用户反馈劣质），一次性废弃；
+  //   新键缺省（首次/未显式开启）一律关眼，仅点击标题栏眼睛按钮/右下角小点才启动。
+  var KEY = 'lemongazeActiveV2';
+  var canvas = document.getElementById('lemongazeEye');
+  if (!canvas) { console.error('[LemonGaze] canvas #lemongazeEye missing'); return; }
+  var ctx = canvas.getContext('2d');
+  var active = false, raf = null, t = 0, blink = 0, blinkAt = -1,
+      nextBlink = 2 + Math.random() * 3,
+      cur = { x: 0, y: 0 }, tgt = { x: 0, y: 0 },
+      mouse = { x: 0, y: 0 }, lastMouseT = -10,
+      sac = { x: 0, y: 0 }, nextSaccade = 2 + Math.random() * 2;
+  var W = 0, H = 0, DPR = 1;
+
+  // 表情参数表（★ 以参考图"锐利半月"为基准形态：常态都是镰刀家族，
+  // 只有 silly 是圆眼彩蛋；idle=微眯锐利，away=闭眼）
+  var PRESETS = {
+    wise:     { open: 0.55, tilt: 0.95, round: 0.10, glow: 0.75 },
+    silly:    { open: 1.00, tilt: 0.10, round: 1.00, glow: 0.55 },
+    alert:    { open: 0.95, tilt: 0.55, round: 0.15, glow: 1.00, asym: 0.30 },
+    focus:    { open: 0.85, tilt: 0.60, round: 0.12, glow: 0.90 },
+    listening:{ open: 0.90, tilt: 0.40, round: 0.30, glow: 0.80 },
+    thinking: { open: 0.45, tilt: 0.65, round: 0.15, glow: 0.55 },
+    busy:     { open: 0.75, tilt: 0.45, round: 0.20, glow: 0.95 },
+    happy:    { open: 0.50, tilt: -0.65, round: 0.35, glow: 0.85 },
+    confused: { open: 0.70, tilt: 0.15, round: 0.55, glow: 0.60, asym: 0.25 },
+    idle:     { open: 0.55, tilt: 0.55, round: 0.15, glow: 0.35 },
+    away:     { open: 0.06, tilt: 0.30, round: 0.30, glow: 0.00 },
+    summon:   { open: 1.00, tilt: 0.50, round: 0.15, glow: 1.00 }
+  };
+  var shape = preset('focus');
+  // ★ from/to 必须是完整预设（空对象会导致 lerp 产生 NaN，杀死渲染循环）
+  var from = preset('focus'), to = preset('focus'), animT0 = 0, animDur = 0.3;
+
+  function preset(name) {
+    var p = PRESETS[name] || PRESETS.focus;
+    return { open: p.open, tilt: p.tilt, round: p.round,
+             glow: p.glow, asym: p.asym || 0 };
+  }
+  function lerp(a, b, k) { return a + (b - a) * k; }
+
+  function resize() {
+    var w = canvas.clientWidth || window.innerWidth;
+    var h = canvas.clientHeight || window.innerHeight;
+    W = Math.max(1, w); H = Math.max(1, h);
+    DPR = Math.min(2, window.devicePixelRatio || 1);
+    canvas.width = Math.floor(W * DPR);
+    canvas.height = Math.floor(H * DPR);
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+
+  // 半月形（两段弧拼成，端点锐利——对齐参考图）：
+  // 上缘从内低角到外高角几乎笔直，下缘单控制点深弧 → 两端锐角
+  // 几何按参考图量测校准：内角更低、外角更高翘、上缘零拱、月牙更饱满
+  function eyePath(cx, cy, rx, ry, tilt, round, side) {
+    var p = new Path2D();
+    if (round > 0.72) { p.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); return p; }
+    var tt = Math.max(-1, Math.min(1, tilt));
+    var ix = cx - side * rx, iy = cy + ry * (0.50 + 0.25 * tt);   // 内角（低）
+    var ox = cx + side * rx, oy = cy - ry * (0.40 + 0.75 * tt);   // 外角（高翘）
+    var mx = (ix + ox) / 2, my = (iy + oy) / 2 - ry * 0.03;       // 上缘笔直
+    var depth = (tt >= 0 ? 1.60 - 0.20 * tt : 1.60 + 0.40 * -tt) * ry;
+    p.moveTo(ix, iy);
+    p.quadraticCurveTo(mx, my, ox, oy);
+    p.quadraticCurveTo(cx, cy + depth, ix, iy);
+    p.closePath();
+    return p;
+  }
+
+  function hexToRgb(h) {
+    h = (h || '').replace('#', '');
+    if (h.length === 3) { h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2]; }
+    var n = parseInt(h, 16);
+    if (isNaN(n)) { return { r: 255, g: 105, b: 0 }; }
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    if (shape.glow <= 0.01 && shape.open <= 0.02) { return; }
+    var eyeColor = (getComputedStyle(document.documentElement)
+      .getPropertyValue('--theme-robot-eye') || '#ff6900').trim() || '#ff6900';
+    var col = hexToRgb(eyeColor);
+    var main = 'rgb(' + col.r + ',' + col.g + ',' + col.b + ')';
+    var hot = 'rgb(' + Math.min(255, col.r + 90) + ',' +
+      Math.min(255, col.g + 80) + ',' + Math.min(255, col.b + 110) + ')';
+    var deep = 'rgb(' + Math.max(0, col.r - 50) + ',' +
+      Math.max(0, col.g - 90) + ',' + Math.max(0, col.b - 20) + ')';
+    // 光晕呼吸（生命感）
+    var glow = shape.glow * (0.86 + 0.14 * Math.sin(t * 1.1));
+    // 比例：扁宽半月（高≈70%半宽，参考图量测），两眼内角间距小，居中偏上
+    var rx = Math.min(W * 0.118, H * 0.175);
+    var gap = rx * 2.18;
+    var cx = W / 2 + cur.x * rx * 0.16;
+    var cy = H * 0.44 + cur.y * rx * 0.18;
+    var openF = shape.open * (1 - blink);
+
+    for (var s = -1; s <= 1; s += 2) {
+      var rrx = rx * (1 + (s > 0 ? shape.asym * 0.30 : -shape.asym * 0.30));
+      var ry = Math.max(0.6, rrx * 0.70 * openF);
+      var ex = cx + s * gap / 2;
+      var path = eyePath(ex, cy, rrx, ry, shape.tilt, shape.round, s);
+      ctx.save();
+      // ① bloom：多重阴影叠画（经验：单层 shadowBlur 不足，由大到小叠 3 层）
+      ctx.globalAlpha = 0.35 * Math.max(0.15, glow);
+      ctx.shadowColor = main;
+      ctx.fillStyle = main;
+      ctx.shadowBlur = rrx * 1.10; ctx.fill(path); ctx.fill(path);
+      ctx.shadowBlur = rrx * 0.45; ctx.fill(path);
+      // ② 实体：线性渐变（上白热暖橙 → 主色 → 下深橙红）
+      ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+      var g = ctx.createLinearGradient(ex, cy - ry, ex, cy + ry);
+      g.addColorStop(0, hot); g.addColorStop(0.55, main); g.addColorStop(1, deep);
+      ctx.fillStyle = g; ctx.fill(path);
+      // ③ 白热描边（霓虹管芯）
+      ctx.shadowColor = hot; ctx.shadowBlur = rrx * 0.22 * glow;
+      ctx.lineWidth = Math.max(2, rrx * 0.035);
+      ctx.strokeStyle = hot; ctx.stroke(path);
+      ctx.restore();
+    }
+    // 鼻：圆头短条（双程发光）
+    if (openF > 0.08) {
+      var ny = cy + rx * 0.92, nl = rx * 0.40;
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.shadowColor = main; ctx.shadowBlur = rx * 0.5 * glow;
+      ctx.strokeStyle = main; ctx.lineWidth = rx * 0.10;
+      ctx.beginPath(); ctx.moveTo(W / 2, ny);
+      ctx.lineTo(W / 2 + cur.x * 3, ny + nl); ctx.stroke();
+      ctx.strokeStyle = hot; ctx.lineWidth = rx * 0.045;
+      ctx.beginPath(); ctx.moveTo(W / 2, ny);
+      ctx.lineTo(W / 2 + cur.x * 3, ny + nl); ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  function backOut(p) {           // 轻微过冲的弹性缓动（表情切换丝滑关键）
+    var c1 = 1.70158, c3 = c1 + 1;
+    var q = p - 1;
+    return 1 + c3 * q * q * q + c1 * q * q;
+  }
+  function loop() {
+    t += 0.033;
+    if (!isFinite(shape.open + shape.tilt + shape.glow)) {
+      shape = preset('focus');  // 防御：任何 NaN 不得杀死渲染循环
+    }
+    var p = Math.min(1, (t - animT0) / animDur);
+    p = backOut(p);
+    if (p > 1.10) { p = 1.10; } else if (p < 0) { p = 0; }
+    shape.open = Math.max(0, Math.min(1.04, lerp(from.open, to.open, p)));
+    shape.tilt = lerp(from.tilt, to.tilt, p);
+    shape.round = lerp(from.round, to.round, p);
+    shape.glow = lerp(from.glow, to.glow, p);
+    shape.asym = lerp(from.asym, to.asym, p);
+    // 眨眼：快闭慢开的非对称曲线（真实眨眼闭合相 <40% 时程）
+    if (blinkAt < 0 && t >= nextBlink) { blinkAt = t; }
+    if (blinkAt >= 0) {
+      var bp = (t - blinkAt) / 0.22;
+      if (bp >= 1) { blink = 0; blinkAt = -1;
+        nextBlink = t + 2.5 + Math.random() * 3.5; }
+      else if (bp < 0.38) { blink = Math.pow(bp / 0.38, 0.7); }
+      else { blink = 1 - Math.pow((bp - 0.38) / 0.62, 1.6); }
+    }
+    // 扫视（saccade）：鼠标静止 >3s 时眼神随机游走，避免死板
+    if (t >= nextSaccade) {
+      nextSaccade = t + 1.8 + Math.random() * 2.6;
+      sac.x = (Math.random() * 2 - 1) * 0.35;
+      sac.y = (Math.random() * 2 - 1) * 0.16;
+    }
+    var want = (t - lastMouseT < 3) ? mouse : sac;
+    tgt.x += (want.x - tgt.x) * 0.08;
+    tgt.y += (want.y - tgt.y) * 0.08;
+    cur.x += (tgt.x - cur.x) * 0.12 + 0.004 * Math.sin(t * 6.1);  // 微颤生命感
+    cur.y += (tgt.y - cur.y) * 0.12;
+    draw();
+    raf = requestAnimationFrame(loop);
+  }
+
+  function start() { resize(); if (!raf) { raf = requestAnimationFrame(loop); } }
+  function stop() {
+    if (raf) { cancelAnimationFrame(raf); raf = null; }
+    ctx.clearRect(0, 0, W, H);
+  }
+
+  // ── 对外接口（PyQt 侧 runJavaScript 调用）──
+  window.lemonGazeSetActive = function (on) {
+    active = !!on;
+    try { localStorage.setItem(KEY, active ? '1' : '0'); } catch (e) {}
+    document.body.classList.toggle('lemongaze-on', active);
+    // 透明度由 JS 直接控制（内联优先级高于外部 CSS，避免被覆盖）
+    canvas.style.opacity = active ? '1' : '0';
+    // 压掉星空/流星（内联优先，兼容 applyWallpaper 设的内联 opacity）
+    try {
+      var _neb = document.getElementById('nebula');
+      var _sf = document.getElementById('starfield');
+      if (_neb) { _neb.style.opacity = active ? '0' : ''; }
+      if (_sf) { _sf.style.opacity = active ? '0' : ''; }
+    } catch (e) {}
+    if (active) { start(); } else { stop(); }
+    console.error('[LemonGaze] setActive=' + active + ' WxH=' + W + 'x' + H);
+  };
+  window.lemonGazeSetExpression = function (name) {
+    if (!PRESETS[name]) { return; }
+    from = { open: shape.open, tilt: shape.tilt, round: shape.round,
+             glow: shape.glow, asym: shape.asym };
+    to = preset(name); animT0 = t; animDur = 0.3;
+  };
+
+  document.addEventListener('mousemove', function (e) {
+    mouse.x = (e.clientX / Math.max(1, W)) * 2 - 1;
+    mouse.y = (e.clientY / Math.max(1, H)) * 2 - 1;
+    lastMouseT = t;
+  });
+  window.addEventListener('resize', function () { if (active) { resize(); } });
+
+  // 页面重载后自恢复：缺省（首次/未显式开启）默认关眼，仅显式 '1' 才开（用户定稿：点击才启动）
+  try {
+    var saved = localStorage.getItem(KEY);
+    var initial = (saved === '1');
+    window.lemonGazeSetActive(initial);
+    console.error('[LemonGaze] eye init, active=' + initial + ' saved=' + saved);
+  } catch (e) {}
+})();
+</script>
+<!-- Toast 容器 -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- ★★★★★ 右侧工具面板（Trae风格 Skill 可视化仪表盘） ★★★★★ -->
+<div id="rightPanel">
+  <div class="panel-header">
+    <div class="panel-title">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ff9a4a" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+      <span id="panelTitleText">工具面板</span>
+    </div>
+    <button class="panel-close" onclick="_closeRightPanel()" title="关闭面板">×</button>
+  </div>
+  <!-- Tab 切换栏 -->
+  <div class="tool-panel-tabs" id="toolPanelTabs"></div>
+  <!-- 内容区 -->
+  <div class="tool-panel-content" id="toolPanelContent">
+    <div style="padding:20px;text-align:center;color:rgba(255,255,255,0.3);font-size:12px;">加载中...</div>
+  </div>
+</div>
+<!-- ★★★★★ 右侧工具面板 END ★★★★★ -->
+
+<!--<!-- ===== ★ 自定义模型配置向导 ===== -->
+<div class="custom-engine-overlay" id="customEngineOverlay">
+  <div class="custom-engine-wizard">
+    <div class="custom-engine-header">
+      <span class="custom-engine-header-title">Add Custom Model</span>
+      <button class="custom-engine-close" onclick="closeCustomEngineWizard()">&times;</button>
+    </div>
+
+    <div class="custom-engine-steps">
+      <div class="ce-step" data-step="1">
+        <div class="ce-step-num active">1</div>
+        <div class="ce-step-label">Provider</div>
+      </div>
+      <div class="ce-step-line"></div>
+      <div class="ce-step" data-step="2">
+        <div class="ce-step-num">2</div>
+        <div class="ce-step-label">Model</div>
+      </div>
+      <div class="ce-step-line"></div>
+      <div class="ce-step" data-step="3">
+        <div class="ce-step-num">3</div>
+        <div class="ce-step-label">API Key</div>
+      </div>
+      <div class="ce-step-line"></div>
+      <div class="ce-step" data-step="4">
+        <div class="ce-step-num">4</div>
+        <div class="ce-step-label">Test</div>
+      </div>
+    </div>
+
+    <div class="custom-engine-body">
+      <div class="ce-page" id="cePage1">
+        <div class="ce-page-title">Select Model Provider</div>
+        <div class="ce-page-desc">Choose the AI service provider for your custom model</div>
+        <div class="ce-provider-grid" id="ceProviderGrid"></div>
+      </div>
+
+      <div class="ce-page" id="cePage2" style="display:none">
+        <div class="ce-page-title">Configure Model</div>
+        <div class="ce-page-desc">Set the API endpoint and model name</div>
+        <div class="ce-field">
+          <label class="ce-label">API Endpoint</label>
+          <input type="text" class="ce-input" id="ceApiBase" placeholder="https://api.example.com/v1">
+          <div class="ce-hint">OpenAI-compatible chat/completions endpoint</div>
+        </div>
+        <div class="ce-field">
+          <label class="ce-label">Model Name</label>
+          <input type="text" class="ce-input" id="ceModelName" placeholder="gpt-4o-mini">
+          <div class="ce-hint" id="ceModelHint">Model identifier for the API</div>
+        </div>
+        <div class="ce-field" id="ceModelSelectField" style="display:none">
+          <label class="ce-label">Or select from available models</label>
+          <div class="ce-model-chips" id="ceModelChips"></div>
+        </div>
+      </div>
+
+      <div class="ce-page" id="cePage3" style="display:none">
+        <div class="ce-page-title">Enter API Key</div>
+        <div class="ce-page-desc">Your key is stored locally and never uploaded</div>
+        <div class="ce-field">
+          <label class="ce-label">API Key</label>
+          <div class="ce-key-row">
+            <input type="password" class="ce-input" id="ceApiKey" placeholder="sk-...">
+            <button class="ce-key-toggle" onclick="toggleCeKeyVisibility()" title="Show/Hide">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+          <div class="ce-hint">Key is saved to ~/.lemoncode/custom_engines.json locally</div>
+        </div>
+        <div class="ce-field">
+          <label class="ce-label">Display Name (optional)</label>
+          <input type="text" class="ce-input" id="ceDisplayName" placeholder="My Qwen Plus">
+        </div>
+      </div>
+
+      <div class="ce-page" id="cePage4" style="display:none">
+        <div class="ce-page-title">Test Connection</div>
+        <div class="ce-page-desc">Verify your configuration works before saving</div>
+        <div class="ce-summary" id="ceSummary"></div>
+        <button class="ce-test-btn" id="ceTestBtn" onclick="testCustomEngineConnection()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:6px"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          Test Connection
+        </button>
+        <div class="ce-test-result" id="ceTestResult" style="display:none"></div>
+      </div>
+    </div>
+
+    <div class="custom-engine-footer">
+      <button class="ce-btn ce-btn-secondary" id="cePrevBtn" onclick="ceWizardPrev()" style="display:none">Previous</button>
+      <button class="ce-btn ce-btn-primary" id="ceNextBtn" onclick="ceWizardNext()">Next</button>
+      <button class="ce-btn ce-btn-success" id="ceSaveBtn" onclick="ceWizardSave()" style="display:none">Save & Connect</button>
+    </div>
+  </div>
+</div>
+
+<!-- 几维鸟 K5/K8 接入：自包含 Canvas 3D 线框 + #kiwi-chart 容器（★ 2026-08-08 本地优先修正：移除外网 Plotly CDN）
+     v4.8.1 修复：默认隐藏，仅当 Python 端推送数据时才显示 -->
+<div id="kiwi-chart" style="width:100%;height:320px;border:1px solid #223;background:#0b0e14;color:rgba(255,255,255,0.3);display:none;align-items:center;justify-content:center;font-size:12px;box-sizing:border-box;"></div>
+<script>
+// K8：plot3d_view.build_plotly_html() 输出（自包含 Canvas 渲染，零外部依赖）经 QWebChannel 推入 #kiwi-chart 容器。
+// 直接把整页 HTML 塞进 iframe（srcdoc 赋值，无需转义），容器命中即渲染。
+window.renderKiwiChart = function(html) {
+  var el = document.getElementById('kiwi-chart');
+  if (!el) { console.warn('[kiwi] #kiwi-chart 容器缺失'); return; }
+  el.style.display = 'flex';                   // ★ v4.8.1: 收到数据时显示容器
+  el.innerHTML = '';                          // 替换占位文本
+  var f = document.createElement('iframe');
+  f.style.width = '100%'; f.style.height = '100%'; f.style.border = '0';
+  f.srcdoc = html;                            // 整页 Canvas HTML（无外网依赖）
+  el.appendChild(f);
+};
+</script>
+
+<!-- First-Run Onboarding Wizard -->
+<div id="onboardingOverlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:99999;">
+  <div id="onboardingCard" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:520px;max-width:90vw;background:var(--bg-secondary,#1e1e2e);border-radius:16px;padding:40px;box-shadow:0 24px 80px rgba(0,0,0,0.5);color:var(--text-primary,#e0e0e0);">
+    <div id="onboardingStep0">
+      <h2 id="onb0Title" style="font-size:24px;margin:0 0 8px 0;font-weight:700;">Choose Language</h2>
+      <p id="onb0Sub" style="color:var(--text-secondary,#888);margin:0 0 24px 0;line-height:1.6;">Select your preferred language to get started</p>
+      <div style="margin-bottom:24px;">
+        <div id="onbLangZh" onclick="onboardingSelectLang('zh_CN')" style="display:flex;align-items:center;gap:12px;padding:16px;background:var(--bg-tertiary,#2a2a3a);border-radius:8px;margin-bottom:8px;cursor:pointer;border:2px solid transparent;font-size:16px;font-weight:600;">
+          <span style="font-size:24px;">🇨🇳</span>
+          <span>简体中文</span>
+        </div>
+        <div id="onbLangEn" onclick="onboardingSelectLang('en_US')" style="display:flex;align-items:center;gap:12px;padding:16px;background:var(--bg-tertiary,#2a2a3a);border-radius:8px;margin-bottom:8px;cursor:pointer;border:2px solid transparent;font-size:16px;font-weight:600;">
+          <span style="font-size:24px;">🇬🇧</span>
+          <span>English</span>
+        </div>
+      </div>
+      <button id="onb0Btn" onclick="onboardingConfirmLang()" style="width:100%;padding:14px;background:var(--accent,#6c5ce7);color:#fff;border:none;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;opacity:0.5;pointer-events:none;">Next</button>
+    </div>
+    <div id="onboardingStep1" style="display:none;">
+      <h2 id="onb1Title" style="font-size:24px;margin:0 0 8px 0;font-weight:700;">Welcome to LemonCode</h2>
+      <p id="onb1Sub" style="color:var(--text-secondary,#888);margin:0 0 24px 0;line-height:1.6;">Your AI-powered coding agent. Let me help you get started in 30 seconds.</p>
+      <div style="margin-bottom:24px;">
+        <div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--bg-tertiary,#2a2a3a);border-radius:8px;margin-bottom:8px;">
+          <span style="font-size:20px;">&#9889;</span>
+          <span id="onb1Chat">Chat with AI to generate, edit, and debug code</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--bg-tertiary,#2a2a3a);border-radius:8px;margin-bottom:8px;">
+          <span style="font-size:20px;">&#128736;</span>
+          <span id="onb1Git">Automatic git checkpoints on every file change</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--bg-tertiary,#2a2a3a);border-radius:8px;">
+          <span style="font-size:20px;">&#127760;</span>
+          <span id="onb1Engines">Works with Ollama, DeepSeek, OpenAI, and more</span>
+        </div>
+      </div>
+      <button id="onb1Btn" onclick="onboardingNext(2)" style="width:100%;padding:14px;background:var(--accent,#6c5ce7);color:#fff;border:none;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;">Get Started</button>
+    </div>
+    <div id="onboardingStep2" style="display:none;">
+      <h2 id="onb2Title" style="font-size:24px;margin:0 0 8px 0;font-weight:700;">Choose Your Engine</h2>
+      <p id="onb2Sub" style="color:var(--text-secondary,#888);margin:0 0 24px 0;">Select an AI engine to power your coding assistant.</p>
+      <div id="onboardingEngineList" style="margin-bottom:24px;"></div>
+      <div style="display:flex;gap:12px;">
+        <button id="onb2Back" onclick="onboardingNext(1)" style="flex:1;padding:12px;background:var(--bg-tertiary,#2a2a3a);color:var(--text-primary,#e0e0e0);border:none;border-radius:8px;font-size:14px;cursor:pointer;">Back</button>
+        <button id="onb2Next" onclick="onboardingNext(3)" style="flex:2;padding:12px;background:var(--accent,#6c5ce7);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;">Next</button>
+      </div>
+    </div>
+    <div id="onboardingStep3" style="display:none;">
+      <h2 id="onb3Title" style="font-size:24px;margin:0 0 8px 0;font-weight:700;">Quick Tips</h2>
+      <div style="margin-bottom:24px;">
+        <div style="padding:12px 0;border-bottom:1px solid var(--border,#333);">
+          <strong style="color:var(--accent,#6c5ce7);">Ctrl+Enter</strong> &mdash; <span id="onb3Send">Send message</span>
+        </div>
+        <div style="padding:12px 0;border-bottom:1px solid var(--border,#333);">
+          <strong style="color:var(--accent,#6c5ce7);">Trust Mode</strong> &mdash; <span id="onb3Trust">Toggle auto-approve tool calls</span>
+        </div>
+        <div style="padding:12px 0;border-bottom:1px solid var(--border,#333);">
+          <strong style="color:var(--accent,#6c5ce7);">/help</strong> &mdash; <span id="onb3Help">Show all commands</span>
+        </div>
+        <div style="padding:12px 0;">
+          <strong style="color:var(--accent,#6c5ce7);">Diff Preview</strong> &mdash; <span id="onb3Diff">Review changes before applying</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:12px;">
+        <button id="onb3Back" onclick="onboardingNext(2)" style="flex:1;padding:12px;background:var(--bg-tertiary,#2a2a3a);color:var(--text-primary,#e0e0e0);border:none;border-radius:8px;font-size:14px;cursor:pointer;">Back</button>
+        <button id="onb3Finish" onclick="onboardingFinish()" style="flex:2;padding:12px;background:var(--accent,#6c5ce7);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;">Start Coding</button>
+      </div>
+    </div>
+    <div id="onboardingIndicator" style="display:flex;justify-content:center;gap:8px;margin-top:20px;">
+      <span id="onbDot0" style="width:8px;height:8px;border-radius:50%;background:var(--accent,#6c5ce7);"></span>
+      <span id="onbDot1" style="width:8px;height:8px;border-radius:50%;background:var(--border,#333);"></span>
+      <span id="onbDot2" style="width:8px;height:8px;border-radius:50%;background:var(--border,#333);"></span>
+      <span id="onbDot3" style="width:8px;height:8px;border-radius:50%;background:var(--border,#333);"></span>
+    </div>
+  </div>
+</div>
+<script>
+var _onbSelectedLang = null;
+function onboardingSelectLang(lang) {
+  _onbSelectedLang = lang;
+  document.getElementById('onbLangZh').style.borderColor = lang === 'zh_CN' ? 'var(--accent,#6c5ce7)' : 'transparent';
+  document.getElementById('onbLangEn').style.borderColor = lang === 'en_US' ? 'var(--accent,#6c5ce7)' : 'transparent';
+  var btn = document.getElementById('onb0Btn');
+  btn.style.opacity = '1';
+  btn.style.pointerEvents = 'auto';
+}
+function onboardingConfirmLang() {
+  if (!_onbSelectedLang) return;
+  if (window.pybridge) {
+    window.pybridge.setLanguage(_onbSelectedLang);
+    window.pybridge.getTranslations(JSON.stringify([
+      'onboarding.welcome_title','onboarding.welcome_subtitle',
+      'onboarding.feature_chat','onboarding.feature_git','onboarding.feature_engines',
+      'onboarding.btn_get_started','onboarding.engine_title','onboarding.engine_subtitle',
+      'onboarding.engine_ollama','onboarding.engine_ollama_desc',
+      'onboarding.engine_deepseek','onboarding.engine_deepseek_desc',
+      'onboarding.engine_mimocode','onboarding.engine_mimocode_desc',
+      'onboarding.btn_back','onboarding.btn_next',
+      'onboarding.tips_title','onboarding.tip_send','onboarding.tip_trust',
+      'onboarding.tip_help','onboarding.tip_diff','onboarding.btn_start_coding'
+    ]), function(result) {
+      try { window._onbTrans = JSON.parse(result); onboardingApplyTranslations(); } catch(e) {}
+    });
+  }
+  onboardingNext(1);
+}
+function onboardingApplyTranslations() {
+  var t = window._onbTrans || {};
+  var _ = function(k, fallback) { return t[k] || fallback; };
+  var el = function(id) { var e = document.getElementById(id); return e; };
+  var s;
+  s = el('onb1Title'); if(s) s.textContent = _('onboarding.welcome_title','Welcome to LemonCode');
+  s = el('onb1Sub'); if(s) s.textContent = _('onboarding.welcome_subtitle','Your AI-powered coding agent. Let me help you get started in 30 seconds.');
+  s = el('onb1Chat'); if(s) s.textContent = _('onboarding.feature_chat','Chat with AI to generate, edit, and debug code');
+  s = el('onb1Git'); if(s) s.textContent = _('onboarding.feature_git','Automatic git checkpoints on every file change');
+  s = el('onb1Engines'); if(s) s.textContent = _('onboarding.feature_engines','Works with Ollama, DeepSeek, OpenAI, and more');
+  s = el('onb1Btn'); if(s) s.textContent = _('onboarding.btn_get_started','Get Started');
+  s = el('onb2Title'); if(s) s.textContent = _('onboarding.engine_title','Choose Your Engine');
+  s = el('onb2Sub'); if(s) s.textContent = _('onboarding.engine_subtitle','Select an AI engine to power your coding assistant.');
+  s = el('onb2Back'); if(s) s.textContent = _('onboarding.btn_back','Back');
+  s = el('onb2Next'); if(s) s.textContent = _('onboarding.btn_next','Next');
+  s = el('onb3Title'); if(s) s.textContent = _('onboarding.tips_title','Quick Tips');
+  s = el('onb3Send'); if(s) s.textContent = _('onboarding.tip_send','Send message');
+  s = el('onb3Trust'); if(s) s.textContent = _('onboarding.tip_trust','Toggle auto-approve tool calls');
+  s = el('onb3Help'); if(s) s.textContent = _('onboarding.tip_help','Show all commands');
+  s = el('onb3Diff'); if(s) s.textContent = _('onboarding.tip_diff','Review changes before applying');
+  s = el('onb3Back'); if(s) s.textContent = _('onboarding.btn_back','Back');
+  s = el('onb3Finish'); if(s) s.textContent = _('onboarding.btn_start_coding','Start Coding');
+  window._onbEngineData = [
+    {id:'ollama', name:_('onboarding.engine_ollama','Ollama (Local)'), desc:_('onboarding.engine_ollama_desc','Free, runs locally, private')},
+    {id:'deepseek', name:_('onboarding.engine_deepseek','DeepSeek Cloud'), desc:_('onboarding.engine_deepseek_desc','Fast, affordable API')},
+    {id:'mimocode', name:_('onboarding.engine_mimocode','MimoCode'), desc:_('onboarding.engine_mimocode_desc','Built-in engine')}
+  ];
+}
+function onboardingNext(step) {
+  document.getElementById('onboardingStep0').style.display = step === 0 ? 'block' : 'none';
+  document.getElementById('onboardingStep1').style.display = step === 1 ? 'block' : 'none';
+  document.getElementById('onboardingStep2').style.display = step === 2 ? 'block' : 'none';
+  document.getElementById('onboardingStep3').style.display = step === 3 ? 'block' : 'none';
+  for (var i = 0; i <= 3; i++) {
+    document.getElementById('onbDot' + i).style.background = i === step ? 'var(--accent,#6c5ce7)' : 'var(--border,#333)';
+  }
+  if (step === 2) onboardingLoadEngines();
+}
+function onboardingFinish() {
+  localStorage.setItem('lemon_onboarding_done', '1');
+  document.getElementById('onboardingOverlay').style.display = 'none';
+}
+function onboardingLoadEngines() {
+  var el = document.getElementById('onboardingEngineList');
+  if (el.children.length > 0) return;
+  var engines = window._onbEngineData || [
+    {id:'ollama', name:'Ollama (Local)', desc:'Free, runs locally, private'},
+    {id:'deepseek', name:'DeepSeek Cloud', desc:'Fast, affordable API'},
+    {id:'mimocode', name:'MimoCode', desc:'Built-in engine'},
+  ];
+  engines.forEach(function(e) {
+    var d = document.createElement('div');
+    d.style.cssText = 'padding:12px;background:var(--bg-tertiary,#2a2a3a);border-radius:8px;margin-bottom:8px;cursor:pointer;border:2px solid transparent;';
+    d.innerHTML = '<strong>' + e.name + '</strong><br><span style="color:var(--text-secondary,#888);font-size:13px;">' + e.desc + '</span>';
+    d.onclick = function() {
+      el.querySelectorAll('div').forEach(function(x){x.style.borderColor='transparent';});
+      d.style.borderColor = 'var(--accent,#6c5ce7)';
+      if (typeof switchEngine === 'function') switchEngine(e.id);
+      else if (window.pybridge) window.pybridge.call('switchEngine', e.id);
+    };
+    el.appendChild(d);
+  });
+}
+if (!localStorage.getItem('lemon_onboarding_done')) {
+  document.getElementById('onboardingOverlay').style.display = 'block';
+}
+</script>
+
+<script>
+var _stToolbar = document.getElementById('styleToolbar');
+document.addEventListener('selectionchange', function() {
+  var sel = window.getSelection();
+  if (!sel || sel.isCollapsed || !sel.rangeCount) { _stToolbar.style.display = 'none'; return; }
+  var range = sel.getRangeAt(0);
+  var rect = range.getBoundingClientRect();
+  if (rect.width < 2) { _stToolbar.style.display = 'none'; return; }
+  _stToolbar.style.display = 'flex';
+  _stToolbar.style.top = (rect.top - 40 + window.scrollY) + 'px';
+  _stToolbar.style.left = (rect.left + rect.width / 2 - 120) + 'px';
+});
+function stFormat(type) {
+  var sel = window.getSelection();
+  if (!sel || sel.isCollapsed) return;
+  var text = sel.toString();
+  var wrap = {'bold':'**'+text+'**','italic':'*'+text+'*','code':'`'+text+'`','heading':'## '+text,'list':'- '+text,'quote':'> '+text};
+  if (document.execCommand && type === 'bold') { document.execCommand('bold'); return; }
+  if (document.execCommand && type === 'italic') { document.execCommand('italic'); return; }
+  var active = document.activeElement;
+  if (active && active.tagName === 'TEXTAREA') {
+    var s = active.selectionStart, e = active.selectionEnd;
+    var v = active.value;
+    active.value = v.substring(0,s) + (wrap[type]||text) + v.substring(e);
+    active.selectionStart = s; active.selectionEnd = s + (wrap[type]||text).length;
+  }
+  _stToolbar.style.display = 'none';
+}
+function stSetFont(f) { if(!f)return; document.execCommand('fontName',false,f); _stToolbar.style.display='none'; }
+function stSetSize(s) { if(!s)return; document.execCommand('fontSize',false,s); _stToolbar.style.display='none'; }
+</script>
+
+<!-- ══════════════════════════════════════════════════════════
+     ★ v355 自定义模型表单（Trae/CodeBuddy 式）：
+     供应商 / BASE URL / API KEY / 模型名称 / 高级设置 / 输入输出长度
+     保存时真探测，只有连接成功的才入模型列表
+     ══════════════════════════════════════════════════════════ -->
+<div id="cmFormMask" style="display:none;position:fixed;inset:0;z-index:99995;background:rgba(0,0,0,0.60);align-items:center;justify-content:center;">
+  <div style="width:min(460px,92vw);max-height:88vh;overflow-y:auto;background:#1a1a20;border:1px solid rgba(255,150,40,0.30);border-radius:14px;box-shadow:0 20px 70px rgba(0,0,0,0.7);">
+    <div style="display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid rgba(255,255,255,0.07);">
+      <span style="font-size:15px;font-weight:700;color:#ffd9a8;">添加自定义模型</span>
+      <span onclick="closeCmForm()" style="margin-left:auto;font-size:17px;color:rgba(255,255,255,0.5);cursor:pointer;">✕</span>
+    </div>
+    <div style="padding:14px 18px 6px;">
+      <div class="cm-err" id="cmErr" style="display:none;margin-bottom:10px;padding:7px 11px;background:rgba(255,82,82,0.10);border:1px solid rgba(255,82,82,0.35);border-radius:8px;font-size:12px;color:#ff8a80;"></div>
+      <div class="cm-field-label">供应商</div>
+      <select class="cm-input" id="cmProvider" style="appearance:auto;">
+        <option value="custom" selected>⊕ Custom（OpenAI 兼容）</option>
+      </select>
+      <div class="cm-field-label">BASE URL</div>
+      <input class="cm-input" id="cmBaseUrl" type="text" placeholder="https://api.example.com/v1" spellcheck="false">
+      <div class="cm-field-label">API KEY</div>
+      <div style="position:relative;">
+        <input class="cm-input" id="cmApiKey" type="password" placeholder="sk-… 或服务商提供的密钥" spellcheck="false" style="padding-right:38px;">
+        <span onclick="toggleCmKeyVis()" id="cmKeyEye" style="position:absolute;right:11px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:14px;color:rgba(255,255,255,0.45);">👁</span>
+      </div>
+      <div class="cm-field-label">模型名称</div>
+      <input class="cm-input" id="cmName" type="text" placeholder="如 hy3 / gpt-4o-mini / qwen-max" spellcheck="false">
+      <div style="margin-top:8px;"><span style="font-size:12px;color:#8fc7ff;cursor:pointer;" title="推理档位（扩展字段，暂存档）">+ 添加思考强度</span></div>
+
+      <div class="cm-field-label" style="margin-top:14px;font-weight:700;color:rgba(235,240,252,0.75);">高级设置</div>
+      <label class="cm-check-row"><input type="checkbox" id="cmTools" checked><span>工具调用</span></label>
+      <label class="cm-check-row"><input type="checkbox" id="cmVision"><span>图片输入</span></label>
+      <label class="cm-check-row"><input type="checkbox" id="cmReasoning"><span>推理</span></label>
+
+      <div class="cm-field-label" style="margin-top:12px;">输入（上下文长度）</div>
+      <input class="cm-input" id="cmCtxIn" type="number" value="131072" min="2048" step="1024">
+      <div class="cm-chips" id="cmCtxChips">
+        <span class="cm-chip" data-v="32768">32K</span><span class="cm-chip" data-v="65536">64K</span><span class="cm-chip" data-v="131072" data-on="1">128K</span><span class="cm-chip" data-v="262144">256K</span>
+      </div>
+      <div class="cm-field-label" style="margin-top:12px;">输出（最大输出）</div>
+      <input class="cm-input" id="cmCtxOut" type="number" value="8192" min="512" step="512">
+      <div class="cm-chips" id="cmOutChips">
+        <span class="cm-chip" data-v="8192" data-on="1">8K</span><span class="cm-chip" data-v="16384">16K</span><span class="cm-chip" data-v="32768">32K</span><span class="cm-chip" data-v="65536">64K</span>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;padding:14px 18px 18px;">
+      <button onclick="closeCmForm()" style="flex:1;padding:9px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.14);border-radius:9px;color:rgba(255,255,255,0.7);font-size:13px;cursor:pointer;">取消</button>
+      <button id="cmSaveBtn" onclick="saveCmForm()" style="flex:1.4;padding:9px;background:linear-gradient(135deg,#ff6900,#ff9a3c);border:none;border-radius:9px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">保存并测试连接</button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

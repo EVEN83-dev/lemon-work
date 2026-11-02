@@ -1,0 +1,159 @@
+============================================================
+Lemon Code 右侧面板输出测试
+时间: 2026-08-19 23:10:33
+============================================================
+
+============================================================
+[TEST A] Ollama 端口检测
+============================================================
+[PASS] Ollama 端口 11434 可连接
+
+============================================================
+[TEST A2] Ollama 模型列表
+============================================================
+[PASS] 可用模型: MIEMIE.V1-test:latest, qwen3:4b, llava:latest, qwen2.5:7b, qwen2.5-coder:3b, aleshribar3/deepseek-r1-tool-calling:8b, qwen2.5:1.5b, qwen3.5:9b, qwen3.5:4b, qwen3-vl:4b
+
+============================================================
+[TEST B] EngineManager.agent_chat() 直接调用
+============================================================
+[INFO] EngineManager 初始化完成
+[INFO] 可用引擎: ['ollama', 'mimocode', 'deepseek', 'miemie_v1', 'compat_moonshot_test']
+[INFO] 活跃引擎: deepseek
+[INFO] 引擎 ollama: available=True
+[INFO] 引擎 mimocode: available=True
+[INFO] 引擎 deepseek: available=True
+[INFO] 引擎 miemie_v1: available=False
+[INFO] 引擎 compat_moonshot_test: available=False
+[INFO] 正在调用 agent_chat('你好，请简单回复一句话')...
+[PASS] agent_chat 返回内容 (len=3, iterations=1, elapsed=4.86s)
+[PASS] 回复前200字: 你好！
+
+============================================================
+[TEST C] PyBridge 信号链测试（无需 GUI）
+============================================================
+[INFO] 测试 on_output → append_message_signal 链路...
+[SIGNAL] append_message_signal: len=12
+[SIGNAL] append_message_signal: len=44
+[INFO] 测试 output_received → on_output 链路...
+[SIGNAL] output_received: len=14
+[INFO] 测试 command_sent 信号...
+[SIGNAL] command_sent: 你好
+[PASS] 信号链正常，收到 3 条输出
+[INFO]   #1 [append_message] len=12
+[INFO]   #2 [append_message] len=44
+[INFO]   #3 [output_received] len=14
+
+============================================================
+[TEST C2] MIMOCodePanel 类结构检查
+============================================================
+[INFO] output_received 信号: YES
+[INFO] command_sent 信号: YES
+[INFO] error_occurred 信号: YES
+[INFO] on_output 方法: YES
+[PASS] MIMOCodePanel 类结构正确
+
+[INFO] 类结构检查通过，继续 GUI 测试...
+
+============================================================
+[TEST D] 完整 GUI 测试
+============================================================
+[INFO] 引擎管理器已注入
+[INFO] Lemon Code 服务已启动
+[INFO] 三色灯控件已找到: AgentStatusLight
+[INFO] GUI 已启动，5秒后自动发送，25秒后出报告...
+[GUI] 三色灯状态变更: connected
+[GUI] append_status_signal: len=65, 前80=<span style='color:#4caf50;'>{ICON:check} Lemon Code 服务已连接</span>
+[GUI] append_status_signal: len=25, 前80=恢复会话: ses_02f793bc6ffe...
+[GUI] append_status_signal: len=19, 前80=SSE 已连接到 Lemon Code
+[GUI] append_status_signal: len=79, 前80=<span style='color:#4caf50;'>[MIMO] STDIO Bridge v8 就绪（持久化进程 + Skill 注入）</span>
+[GUI] 自动发送测试消息: Hello Lemon Code! Please reply with one sentence.
+[GUI] command_sent 信号已发射
+[GUI] 三色灯状态变更: working
+[GUI] append_status_signal: len=53, 前80=<span style='color:#4a9eff;'>Agent 启动工具调用循环...</span>
+[GUI] 三色灯状态变更: working
+[GUI] append_status_signal: len=53, 前80=<span style='color:#4a9eff;'>Agent 启动工具调用循环...</span>
+[GUI] append_status_signal: len=753, 前80=<div style='margin:6px 0;padding:8px 10px;background:linear-gradient(135deg,#1a1
+[GUI] on_output 触发: len=99, 前80字=Hello! I'm Lemon Code Agent, your intelligent programming assistant—what can I h
+[GUI] 三色灯状态变更: idle
+[GUI] append_message_signal: len=135
+[GUI] append_message_signal: len=135
+
+============================================================
+[TEST D] GUI 测试最终报告
+============================================================
+[INFO] output_received 触发次数: 10
+[INFO] JS 调用次数: 0
+[PASS] 右侧面板收到输出！
+[INFO]   输出 #0: len=65, 前100字=<span style='color:#4caf50;'>{ICON:check} Lemon Code 服务已连接</span>
+[INFO]   输出 #1: len=25, 前100字=恢复会话: ses_02f793bc6ffe...
+[INFO]   输出 #2: len=19, 前100字=SSE 已连接到 Lemon Code
+[INFO]   输出 #3: len=79, 前100字=<span style='color:#4caf50;'>[MIMO] STDIO Bridge v8 就绪（持久化进程 + Skill 注入）</span>
+[INFO]   输出 #4: len=53, 前100字=<span style='color:#4a9eff;'>Agent 启动工具调用循环...</span>
+[INFO] 流式 token JS: NO
+[INFO] appendMsg JS: NO
+[INFO] 三色灯状态变更次数: 4
+[PASS] 三色灯状态有变化！状态序列: connected -> working -> working -> idle
+[INFO] 三色灯最终状态: idle
+[PASS] 三色灯最终状态正确: idle
+[GUI] 检查右侧面板 DOM 状态（完整 flex 链诊断）...
+[GUI] 尝试 CSS 修复注入...
+[GUI] DOM 诊断结果: {
+  "#content": {
+    "display": "flex",
+    "flex": "1 1 0px",
+    "height": "648px",
+    "maxHeight": "none",
+    "minHeight": "0px",
+    "overflow": "hidden",
+    "position": "absolute",
+    "width": "716px"
+  },
+  ".logo-area": {
+    "display": "block",
+    "flex": "0 0 auto",
+    "height": "170px",
+    "maxHeight": "none",
+    "minHeight": "auto",
+    "overflow": "visible",
+    "position": "relative",
+    "width": "700px"
+  },
+  ".output-area": {
+    "display": "flex",
+    "flex": "1 1 0px",
+    "height": "222px",
+    "maxHeight": "none",
+    "minHeight": "60px",
+    "overflow": "hidden auto",
+    "position": "static",
+    "width": "676px"
+  },
+  ".output-messages": {
+    "display": "block",
+    "flex": "1 1 0px",
+    "height": "222px",
+    "maxHeight": "none",
+    "minHeight": "60px",
+    "overflow": "auto",
+    "position": "static",
+    "width": "676px"
+  },
+  ".workspace-area": {
+    "display": "flex",
+    "flex": "1 1 0px",
+    "height": "254px",
+    "maxHeight": "none",
+    "
+[GUI] CSS 修复返回 None
+
+============================================================
+测试结果汇总
+============================================================
+  [PASS] A_ollama_port
+  [PASS] A2_ollama_models
+  [PASS] B_engine_chat
+  [PASS] C_signal_chain
+  [PASS] C2_panel_class
+  [PASS] D_gui
+
+总计: 6/6 通过

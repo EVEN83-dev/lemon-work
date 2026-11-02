@@ -1,0 +1,84 @@
+{
+  "version": "5.0.0",
+  "description": "混合模式 v5.0 九席编制模型分级与并行限制",
+  "formations": {
+    "1+2": {
+      "label": "精简档",
+      "description": "总指挥 + 执行者 + 测试员（轻量级，适合1.5b/4b模型）",
+      "seats": ["director", "general", "test"],
+      "total": 3
+    },
+    "1+5": {
+      "label": "标准档",
+      "description": "总指挥 + 5席核心团队（平衡并行与显存）",
+      "seats": ["director", "build", "plan", "general", "review", "test"],
+      "total": 6
+    },
+    "full": {
+      "label": "满编9席",
+      "description": "全部9席（需高显存GPU）",
+      "seats": ["director", "build", "plan", "compose", "general", "review", "test", "docs", "devops"],
+      "total": 9
+    }
+  },
+  "role_tiers": {
+    "director": {
+      "default_model": "qwen3.5:9b",
+      "max_parallel": 1,
+      "description": "总指挥 — 任务分解、分发、聚合（最高推理能力）"
+    },
+    "build": {
+      "default_model": "qwen3.5:7b",
+      "max_parallel": 1,
+      "description": "构建者 — 代码生成、编译"
+    },
+    "plan": {
+      "default_model": "qwen3.5:4b",
+      "max_parallel": 2,
+      "description": "规划师 — 架构设计、分析"
+    },
+    "compose": {
+      "default_model": "qwen3.5:4b",
+      "max_parallel": 2,
+      "description": "编辑者 — 编辑、重构"
+    },
+    "general": {
+      "default_model": "qwen3.5:7b",
+      "max_parallel": 2,
+      "description": "执行者 — 任意任务"
+    },
+    "review": {
+      "default_model": "qwen3.5:4b",
+      "max_parallel": 2,
+      "description": "审查员 — 代码审查、质量校验"
+    },
+    "test": {
+      "default_model": "qwen2.5:1.5b",
+      "max_parallel": 3,
+      "description": "测试工程师 — 单元测试、集成测试"
+    },
+    "docs": {
+      "default_model": "qwen2.5:1.5b",
+      "max_parallel": 3,
+      "description": "文档撰写员 — API文档、README"
+    },
+    "devops": {
+      "default_model": "qwen2.5:4b",
+      "max_parallel": 2,
+      "description": "运维工程师 — CI/CD、部署脚本"
+    }
+  },
+  "model_parallel_limits": {
+    "qwen3.5:9b": 1,
+    "qwen3.5:7b": 2,
+    "qwen3.5:4b": 3,
+    "qwen2.5:1.5b": 4,
+    "qwen2.5:4b": 3
+  },
+  "global_settings": {
+    "queue_timeout_seconds": 300,
+    "queue_poll_interval_ms": 500,
+    "pool_default_size": 2,
+    "auto_evict_idle_seconds": 600
+  }
+}

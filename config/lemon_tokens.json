@@ -1,0 +1,58 @@
+{
+  "$schema": "https://trdesign.tokens.dev/dtcg/v1",
+  "description": "Lemon Code 设计 token 单一可信源（SSOT）。所有端（theme.py / tokens.py / hybrid HTML）由此生成，禁止在业务代码硬编码色值。修改后运行: python scripts/gen_tokens.py --inplace",
+  "version": "1.1.0",
+  "color": {
+    "brand": "#ff6900",
+    "brand-light": "#ff8c42",
+    "brand-dim": "rgba(255,105,0,0.12)",
+    "brand-gradient": "linear-gradient(180deg, #ff9a4a 0%, #ff6900 55%, #e55a00 100%)",
+    "bg-root": "#080808",
+    "bg-primary": "#0d0d0d",
+    "bg-secondary": "#111111",
+    "bg-surface": "#161616",
+    "bg-surface-hover": "#1e1e1e",
+    "bg-elevated": "#1a1a2a",
+    "bg-terminal": "#0a0a0a",
+    "bg-glass": "rgba(18,18,18,0.85)",
+    "border-subtle": "#1a1a1a",
+    "border-default": "#252525",
+    "border-strong": "#333333",
+    "text-primary": "#ffffff",
+    "text-secondary": "#b0b0b0",
+    "text-tertiary": "#808080",
+    "text-muted": "#555555",
+    "success": "#4caf50",
+    "warning": "#ffab40",
+    "error": "#ff5252",
+    "info": "#448aff"
+  },
+  "role": {
+    "ceo": "#ffd700",
+    "pm": "#60a5fa",
+    "tl": "#a78bfa",
+    "fe": "#60a5fa",
+    "be": "#34d399",
+    "qa": "#fbbf24",
+    "devops": "#a78bfa",
+    "doc": "#94a3b8",
+    "design": "#f472b6",
+    "security": "#f87171"
+  },
+  "font": {
+    "sys": "'MiSans', 'HarmonyOS Sans', 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', sans-serif",
+    "mono": "'Cascadia Code', 'Consolas', 'JetBrains Mono', 'Fira Code', monospace",
+    "serif": "'Noto Serif SC', 'Georgia', 'SimSun', serif"
+  },
+  "radius": { "sm": "4px", "md": "6px", "lg": "8px", "xl": "12px" },
+  "space": { "xs": "4px", "sm": "8px", "md": "12px", "lg": "16px", "xl": "24px", "2xl": "32px" },
+  "dur": { "fast": "120ms", "normal": "200ms", "slow": "320ms" },
+  "density": {
+    "font-base": "13px",
+    "card-min": "200px",
+    "grid-gap": "10px",
+    "border-mode": "hover",
+    "effects": "off",
+    "starfield": "off"
+  }
+}

@@ -1,0 +1,168 @@
+# Agent 操作指南
+# ===============
+# 本文件为AI助手提供操作指引，确保正确使用工具、遵循工作流程、完成任务目标
+
+## 核心原则
+
+1. **准确性优先**: 回答问题前先验证信息来源
+2. **用户至上**: 理解用户真实意图，提供贴切帮助
+3. **工具赋能**: 合理使用Skill工具提升效率
+4. **持续学习**: 记录用户偏好，优化后续回复
+
+---
+
+## 工作流程
+
+### 1. 接收任务
+- 解析用户输入，识别任务类型（编码/解释/调试/规划）
+- 确认理解：必要时使用AskUserQuestion澄清需求
+- 评估复杂度：简单任务直接执行，复杂任务规划步骤
+
+### 2. 执行任务
+- **编码任务**: 
+  - 先阅读相关文件理解上下文
+  - 使用Edit工具修改代码（而非Write）
+  - 遵循项目编码规范
+- **调试任务**:
+  - 使用Grep定位问题代码
+  - 使用Read查看完整上下文
+  - 提供修复方案并解释原因
+- **解释任务**:
+  - 使用SearchCodebase语义搜索
+  - 提供文件链接（file:///path/to/file）
+  - 结构化输出（使用Markdown）
+
+### 3. 完成任务
+- 简要总结完成内容
+- 提示后续可能需要的工作
+- 记录重要决策到project_memory.md
+
+---
+
+## 工具使用规范
+
+### 必读文件工具
+- **Read**: 阅读已知文件（先读再改）
+- **Grep**: 搜索文件内容（精确匹配）
+- **Glob**: 搜索文件名（模式匹配）
+- **SearchCodebase**: 语义搜索（意图搜索）
+
+### 修改文件工具
+- **Edit**: 修改现有文件（必须先Read）
+- **Write**: 创建新文件（仅在必要时）
+
+### 执行命令工具
+- **RunCommand**: 执行系统命令（git, npm, pytest等）
+- **CheckCommandStatus**: 检查命令状态
+- **StopCommand**: 停止运行命令
+
+### 交互工具
+- **AskUserQuestion**: 询问用户（澄清需求）
+- **NotifyUser**: 通知用户（审批文档）
+
+---
+
+## 项目上下文管理
+
+### 当前项目信息
+- **项目名称**: Lemon Code / MIMO Agent
+- **主要功能**: 多agent协同工作流系统
+- **技术栈**: Python, PyQt5, WebSocket, SQLite
+- **核心模块**:
+  - core/agent_orchestrator.py - Agent统筹协调器
+  - core/multi_instance_manager.py - 多实例管理器
+  - core/session_continuity.py - 会话持续性管理
+  - core/project_log.py - 项目日志持久化
+
+### 项目约束（Hard Constraints）
+- 必须使用mimocode核心AI服务
+- MIMO Code端口：4097-4101（非4096）
+- AI助手使用Ollama qwen3.5:4b模型
+- 知识库注入user-assistant对话对作为few-shot
+- 右侧边栏必须直接渲染函数图像（不打开HTML）
+- 任务规划需列出已完成/未完成任务
+- 文件修改需记录增删内容
+
+### 项目约定（Engineering Conventions）
+- AgentOrchestrator构造函数不接受storage_dir参数
+- Task数据类字段名是title（不是name）
+- add_task方法接受参数（不是Task对象）
+- mark_task_completed要求任务处于IN_PROGRESS状态
+- ProjectEvent.event_type存储字符串（不是枚举对象）
+
+---
+
+## 错误处理
+
+### 常见错误修复
+1. **AgentOrchestrator.__init__() got unexpected keyword argument**
+   - 原因：构造函数不接受storage_dir
+   - 修复：先创建SessionContinuity和ProjectLog再传入
+
+2. **Task.__init__() missing required argument**
+   - 原因：Task必填project_id字段
+   - 修复：使用add_task方法（自动填充project_id）
+
+3. **mark_task_completed返回False**
+   - 原因：任务未处于IN_PROGRESS状态
+   - 修复：先设置orch._tasks[tid].state = TaskState.IN_PROGRESS
+
+4. **'SessionContinuity' object has no attribute**
+   - 原因：属性名是单数_context_window（不是复数）
+   - 修复：使用正确属性名
+
+---
+
+## 沟通风格
+
+### 语言要求
+- 使用用户最新消息的语言
+- 代码注释使用相同语言
+- 保持对话语言一致性
+
+### 回复原则
+- 简洁直接，避免冗余
+- 使用代码引用（file:///path/to/file#L123-L145）
+- 不使用emoji（除非用户要求）
+- 优先使用CODE REFERENCES显示现有代码
+
+---
+
+## 测试验证
+
+### 测试脚本位置
+- test_hybrid_logic_and_monitoring.py - 逻辑漏洞+监测
+- test_hybrid_mode_comprehensive.py - 混合模式综合
+- test_final_deep.py - 深度验证
+
+### 测试报告位置
+- LOGIC_AND_MONITORING_REPORT.json
+- HYBRID_MODE_COMPREHENSIVE_REPORT.json
+- FINAL_MONITORING_REPORT.json
+
+### 运行测试
+```bash
+python test_hybrid_logic_and_monitoring.py
+python test_hybrid_mode_comprehensive.py
+```
+
+---
+
+## 持续改进
+
+### 学习记录
+- 将用户偏好记录到user_profile.md
+- 将项目约定记录到project_memory.md
+- 将失败教训记录到Lessons Learned
+
+### 优化方向
+- 减少重复文件读取
+- 提高代码修改准确性
+- 优化测试覆盖范围
+- 改进文档完整性
+
+---
+
+**版本**: v1.0
+**更新日期**: 2026-07-19
+**适用范围**: 所有agent实例

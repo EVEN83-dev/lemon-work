@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>专注时刻 · 电影级机械打字机</title>
+<style>
+  body { margin: 0; overflow: hidden; background: #080808; font-family: 'Courier New', monospace; }
+  canvas { display: block; }
+  .ui-layer {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 10;
+  }
+  .top-title {
+    position: absolute; top: 26px; left: 32px;
+    text-shadow: 0 0 30px rgba(0,0,0,0.9);
+  }
+  .top-title h1 { font-size: 24px; margin: 0; font-weight: 300; color: #f0ece0; font-family: serif; letter-spacing: 4px; }
+  .top-title h2 { font-size: 12px; margin: 5px 0 0; font-weight: 300; color: #a09a90; letter-spacing: 2px; }
+  .top-title p { font-size: 11px; margin: 12px 0 0; line-height: 1.6; color: #8a857c; }
+  .top-title p .en { display: block; font-size: 10px; color: #5a5550; font-style: italic; }
+  .status-tip {
+    position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%);
+    color: rgba(255, 200, 100, 0.8); font-size: 13px; letter-spacing: 3px;
+    background: rgba(0,0,0,0.5); padding: 8px 24px; border-radius: 30px;
+    border: 1px solid rgba(255,200,100,0.15); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+    pointer-events: none; font-family: serif; white-space: nowrap;
+  }
+  .err {
+    position: absolute; top: 12%; left: 50%; transform: translate(-50%, 0);
+    color: #f88; font-family: monospace; font-size: 16px;
+    background: rgba(40,0,0,0.8); padding: 14px 26px; border: 1px solid #800; border-radius: 6px; z-index: 100;
+  }
+  @media (max-width: 800px) { .top-title { left: 16px; top: 16px; } .status-tip { bottom: 16px; font-size: 10px; padding: 4px 12px; } }
+</style>
+</head>
+<body>
+  <div class="ui-layer">
+    <div class="top-title">
+      <h1>FOCUS MOMENT · 01</h1>
+      <h2 data-i18n="wallpaper.typewriter.sub">机械骨架 · 全联动</h2>
+      <p data-i18n="wallpaper.typewriter.desc">一体式铸铝机身 · 横向联动杆 · 电影级光效<br><span class="en">Unibody Casting · Universal Bar · Cinematic</span></p>
+    </div>
+    <div class="status-tip" id="statusTip" data-i18n="wallpaper.typewriter.status">◈ 专注时刻 · 机械打字 ◈</div>
+  </div>
+  <script>
+  // ★ 独立壁纸页 i18n（不依赖 mimo_core.js）
+  (function() {
+    var lang = (navigator.language || 'zh').indexOf('zh') === 0 ? 'zh' : 'en';
+    var dict = {
+      zh: {
+        'wallpaper.typewriter.sub': '机械骨架 · 全联动',
+        'wallpaper.typewriter.desc': '一体式铸铝机身 · 横向联动杆 · 电影级光效<br><span class="en">Unibody Casting · Universal Bar · Cinematic</span>',
+        'wallpaper.typewriter.status': '◈ 专注时刻 · 机械打字 ◈'
+      },
+      en: {
+        'wallpaper.typewriter.sub': 'Mechanical Skeleton · Full Linkage',
+        'wallpaper.typewriter.desc': 'Unibody Casting · Universal Bar · Cinematic Lighting<br><span class="en">Unibody Casting · Universal Bar · Cinematic</span>',
+        'wallpaper.typewriter.status': '◈ Focus Moment · Typewriter ◈'
+      }
+    };
+    document.querySelectorAll('[data-i18n]').forEach(function(el) {
+      var k = el.getAttribute('data-i18n');
+      if (dict[lang] && dict[lang][k]) el.innerHTML = dict[lang][k];
+    });
+  })();
+  </script>
+
+  <!-- ★ 使用 UMD 版 Three.js，避免 iframe + file:// 协议下 ES Module 加载失败（同 ocean.html） -->
+  <script src="./libs/three/three.min.js"></script>
+  <script>
+    var THREE = window.THREE;
+    if (!THREE) {
+      var e = document.createElement('div'); e.className = 'err'; e.textContent = 'Three.js 加载失败';
+      document.body.appendChild(e); throw new Error('THREE not loaded');
+    }
+
+    var W = window.innerWidth, H = window.innerHeight;
+
+    try {
+      // ============================================================
+      //  1. 场景 & 渲染器
+      // ============================================================
+      var scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x050404);
+      scene.fog = new THREE.Fog(0x050404, 8, 18);
+
+      var renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(W, H, false);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 0.9;
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      document.body.appendChild(renderer.domElement);
+
+      // 程序化环境贴图（HDR 反射用）— 替代 RoomEnvironment，离线可跑
+      (function setupEnv() {
+        var cvs = document.createElement('canvas');
+        cvs.width = 1024; cvs.height = 512;
+        var ctx = cvs.getContext('2d');
+        var grad = ctx.createLinearGradient(0, 0, 0, 512);
+        grad.addColorStop(0, '#0e0e12');
+        grad.addColorStop(0.45, '#0a0810');
+        grad.addColorStop(0.7, '#1a1208');
+        grad.addColorStop(1, '#060402');
+        ctx.fillStyle = grad; ctx.fillRect(0, 0, 1024, 512);
+        // 主光方向的暖色长条，供金属反射
+        var g1 = ctx.createRadialGradient(300, 150, 10, 300, 150, 340);
+        g1.addColorStop(0, 'rgba(255,238,210,0.5)');
+        g1.addColorStop(0.35, 'rgba(255,214,150,0.15)');
+        g1.addColorStop(1, 'rgba(255,190,120,0)');
+        ctx.fillStyle = g1; ctx.fillRect(0, 0, 1024, 512);
+        // 冷色补光方向
+        var g2 = ctx.createRadialGradient(760, 300, 10, 760, 300, 300);
+        g2.addColorStop(0, 'rgba(150,180,230,0.4)');
+        g2.addColorStop(1, 'rgba(150,180,230,0)');
+        ctx.fillStyle = g2; ctx.fillRect(0, 0, 1024, 512);
+        var tex = new THREE.CanvasTexture(cvs);
+        tex.mapping = THREE.EquirectangularReflectionMapping;
+        var pmrem = new THREE.PMREMGenerator(renderer);
+        pmrem.compileEquirectangularShader();
+        scene.environment = pmrem.fromEquirectangular(tex).texture;
+        pmrem.dispose();
+      })();
+
+      // ----- 光照系统（r160 物理值已换算为 r128 legacy） -----
+      // 主光：暖色聚光（r160: 2200 → legacy 10，decay 0.5 模拟弱衰减）
+      var mainLight = new THREE.SpotLight(0xffeedd, 6);
+      mainLight.position.set(2.8, 4.2, 2.5);
+      mainLight.target.position.set(0, 1.0, 0);
+      mainLight.angle = 0.45;
+      mainLight.penumbra = 0.6;
+      mainLight.decay = 1.2;
+      mainLight.distance = 20;
+      mainLight.castShadow = true;
+      mainLight.shadow.mapSize.width = 1024;
+      mainLight.shadow.mapSize.height = 1024;
+      scene.add(mainLight);
+      scene.add(mainLight.target);
+
+      var fillLight = new THREE.DirectionalLight(0x445566, 0.15);
+      fillLight.position.set(-2, 1, 6);
+      scene.add(fillLight);
+
+      var backLight = new THREE.DirectionalLight(0x332211, 0.1);
+      backLight.position.set(0, 2, -8);
+      scene.add(backLight);
+
+      var ambient = new THREE.AmbientLight(0x1a1520, 0.3);
+      scene.add(ambient);
+
+      var hemi = new THREE.HemisphereLight(0x222233, 0x0a0806, 0.25);
+      scene.add(hemi);
+
+      var camera = new THREE.PerspectiveCamera(24, W / H, 0.1, 40);
+      camera.position.set(1.8, 2.8, 7.5);
+      camera.lookAt(-0.2, 0.9, 0.1);
+
+      // ============================================================
+      //  2. 手写后期（bloom + 暗角 + 颗粒）— 替代 EffectComposer/UnrealBloomPass
+      // ============================================================
+      var fsQuadGeo = new THREE.PlaneGeometry(2, 2);
+      var orthoCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+      var rtParams = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat };
+      var rtScene = new THREE.WebGLRenderTarget(W, H, rtParams);
+      var rtBright = new THREE.WebGLRenderTarget(W, H, rtParams);
+      var rtBlurH1 = new THREE.WebGLRenderTarget(Math.floor(W / 4), Math.floor(H / 4), rtParams);
+      var rtBlurV1 = new THREE.WebGLRenderTarget(Math.floor(W / 4), Math.floor(H / 4), rtParams);
+      var rtBlurH2 = new THREE.WebGLRenderTarget(Math.floor(W / 8), Math.floor(H / 8), rtParams);
+      var rtBlurV2 = new THREE.WebGLRenderTarget(Math.floor(W / 8), Math.floor(H / 8), rtParams);
+
+      var vsFullscreen = 'varying vec2 vUv;\nvoid main(){\n  vUv=uv;\n  gl_Position=vec4(position,1.0);\n}';
+      var fsBright = 'uniform sampler2D tDiffuse;\nuniform float threshold;\nvarying vec2 vUv;\nvoid main(){\n  vec4 tex=texture2D(tDiffuse,vUv);\n  vec3 c=tex.rgb;\n  vec3 bright=max(c-vec3(threshold),0.0);\n  gl_FragColor=vec4(bright,1.0);\n}';
+      var fsBlur = 'uniform sampler2D tDiffuse;\nuniform vec2 direction;\nuniform vec2 resolution;\nvarying vec2 vUv;\nvoid main(){\n  vec2 off=direction/resolution;\n  vec4 color=texture2D(tDiffuse,vUv)*0.227027;\n  color+=texture2D(tDiffuse,vUv+off*1.3846153846)*0.3162162162;\n  color+=texture2D(tDiffuse,vUv-off*1.3846153846)*0.3162162162;\n  color+=texture2D(tDiffuse,vUv+off*3.2307692308)*0.0702702703;\n  color+=texture2D(tDiffuse,vUv-off*3.2307692308)*0.0702702703;\n  gl_FragColor=color;\n}';
+      var fsComposite = 'uniform sampler2D tScene;\nuniform sampler2D tBloom1;\nuniform sampler2D tBloom2;\nuniform sampler2D tNoise;\nuniform float bloomIntensity;\nuniform float vignetteIntensity;\nuniform float grainIntensity;\nuniform float sepia;\nuniform float fade;\nuniform float time;\nuniform vec2 resolution;\nvarying vec2 vUv;\nvec3 sepiaTone(vec3 c,float s){\n  vec3 warm=vec3(1.12,0.98,0.82);\n  vec3 gray=vec3(dot(c,vec3(0.299,0.587,0.114)));\n  return mix(c,gray*warm,s);\n}\nvoid main(){\n  vec4 sceneTex=texture2D(tScene,vUv);\n  vec3 scene=sceneTex.rgb;\n  vec3 bloom1=texture2D(tBloom1,vUv).rgb;\n  vec3 bloom2=texture2D(tBloom2,vUv).rgb;\n  vec3 col=scene+bloom1*bloomIntensity+bloom2*bloomIntensity*0.6;\n  // cat-eye / oval vignette: heavier top/bottom, slightly lighter center ellipse\n  vec2 uv=vUv-0.5;\n  float aspect=resolution.x/resolution.y;\n  vec2 ouv=vec2(uv.x*aspect,uv.y*1.35);\n  float dist=length(ouv);\n  float vig=1.0-smoothstep(0.35,0.92,dist)*vignetteIntensity;\n  col*=vig;\n  // subtle sepia and highlight fade\n  col=sepiaTone(col,sepia);\n  col=mix(col,col*0.88+0.04,fade);\n  // film grain\n  vec2 noiseUv=vUv*resolution/256.0+fract(time*vec2(0.013,0.019));\n  float grain=texture2D(tNoise,noiseUv).r;\n  col*=1.0+(grain-0.5)*grainIntensity;\n  gl_FragColor=vec4(col,1.0);\n}';
+
+      var tNoise = (function() {
+        var cvs = document.createElement('canvas');
+        cvs.width = 256; cvs.height = 256;
+        var ctx = cvs.getContext('2d');
+        var imgData = ctx.createImageData(256, 256);
+        var d = imgData.data;
+        for (var i = 0; i < d.length; i += 4) { var v = Math.floor(Math.random() * 256); d[i] = v; d[i+1] = v; d[i+2] = v; d[i+3] = 255; }
+        ctx.putImageData(imgData, 0, 0);
+        var t = new THREE.CanvasTexture(cvs);
+        t.wrapS = THREE.RepeatWrapping; t.wrapT = THREE.RepeatWrapping;
+        return t;
+      })();
+
+      var matBright = new THREE.ShaderMaterial({ uniforms: { tDiffuse: { value: null }, threshold: { value: 0.55 } }, vertexShader: vsFullscreen, fragmentShader: fsBright });
+      var matBlurH = new THREE.ShaderMaterial({ uniforms: { tDiffuse: { value: null }, direction: { value: new THREE.Vector2(1, 0) }, resolution: { value: new THREE.Vector2(1, 1) } }, vertexShader: vsFullscreen, fragmentShader: fsBlur });
+      var matBlurV = new THREE.ShaderMaterial({ uniforms: { tDiffuse: { value: null }, direction: { value: new THREE.Vector2(0, 1) }, resolution: { value: new THREE.Vector2(1, 1) } }, vertexShader: vsFullscreen, fragmentShader: fsBlur });
+      var matComposite = new THREE.ShaderMaterial({
+        uniforms: { tScene: { value: null }, tBloom1: { value: null }, tBloom2: { value: null }, tNoise: { value: tNoise }, bloomIntensity: { value: 0.06 }, vignetteIntensity: { value: 1.6 }, grainIntensity: { value: 0.05 }, sepia: { value: 0.35 }, fade: { value: 0.12 }, time: { value: 0 }, resolution: { value: new THREE.Vector2(W, H) } },
+        vertexShader: vsFullscreen,
+        fragmentShader: fsComposite
+      });
+      var ppScene = new THREE.Scene();
+      var ppMesh = new THREE.Mesh(fsQuadGeo, matBright);
+      ppScene.add(ppMesh);
+
+      function renderPass(material, target) {
+        ppMesh.material = material;
+        renderer.setRenderTarget(target);
+        renderer.render(ppScene, orthoCam);
+      }
+      function runPostProcess(elapsed) {
+        renderer.setRenderTarget(rtScene);
+        renderer.render(scene, camera);
+        matBright.uniforms.tDiffuse.value = rtScene.texture;
+        renderPass(matBright, rtBright);
+        matBlurH.uniforms.tDiffuse.value = rtBright.texture;
+        matBlurH.uniforms.resolution.value.set(rtBlurH1.width, rtBlurH1.height);
+        renderPass(matBlurH, rtBlurH1);
+        matBlurV.uniforms.tDiffuse.value = rtBlurH1.texture;
+        matBlurV.uniforms.resolution.value.set(rtBlurV1.width, rtBlurV1.height);
+        renderPass(matBlurV, rtBlurV1);
+        matBlurH.uniforms.tDiffuse.value = rtBlurV1.texture;
+        matBlurH.uniforms.resolution.value.set(rtBlurH2.width, rtBlurH2.height);
+        renderPass(matBlurH, rtBlurH2);
+        matBlurV.uniforms.tDiffuse.value = rtBlurH2.texture;
+        matBlurV.uniforms.resolution.value.set(rtBlurV2.width, rtBlurV2.height);
+        renderPass(matBlurV, rtBlurV2);
+        matComposite.uniforms.tScene.value = rtScene.texture;
+        matComposite.uniforms.tBloom1.value = rtBlurV1.texture;
+        matComposite.uniforms.tBloom2.value = rtBlurV2.texture;
+        matComposite.uniforms.time.value = elapsed;
+        renderPass(matComposite, null);
+      }
+
+      function updateSize() {
+        W = window.innerWidth; H = window.innerHeight;
+        renderer.setSize(W, H, false);
+        camera.aspect = W / H;
+        camera.updateProjectionMatrix();
+        rtScene.setSize(W, H);
+        rtBright.setSize(W, H);
+        rtBlurH1.setSize(Math.floor(W / 4), Math.floor(H / 4));
+        rtBlurV1.setSize(Math.floor(W / 4), Math.floor(H / 4));
+        rtBlurH2.setSize(Math.floor(W / 8), Math.floor(H / 8));
+        rtBlurV2.setSize(Math.floor(W / 8), Math.floor(H / 8));
+        matComposite.uniforms.resolution.value.set(W, H);
+      }
+      window.addEventListener('resize', updateSize);
+
+      // ============================================================
+      //  3. 材质
+      // ============================================================
+      var matCastIron = new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 0.3, metalness: 0.9, envMapIntensity: 1.2 });
+      var matBlackGloss = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 0.15, metalness: 0.85, envMapIntensity: 1.5 });
+      var matBlackMatte = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.9, metalness: 0.2 });
+      var matBrass = new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.2, metalness: 0.95, envMapIntensity: 1.8 });
+      var matSilver = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.2, metalness: 0.8, envMapIntensity: 1.6 });
+      var matSteel = new THREE.MeshStandardMaterial({ color: 0x8899aa, roughness: 0.3, metalness: 0.7, envMapIntensity: 1.2 });
+      var matDarkRubber = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.95, metalness: 0.0 });
+      var matPaper = new THREE.MeshStandardMaterial({ color: 0xf5efe0, roughness: 0.9, metalness: 0, side: THREE.DoubleSide });
+      var matRibbon = new THREE.MeshStandardMaterial({ color: 0x551111, roughness: 0.8, metalness: 0.1, side: THREE.DoubleSide });
+
+      // ============================================================
+      //  4. 机械主体（RoundedBoxGeometry → BoxGeometry）
+      // ============================================================
+      var printer = new THREE.Group();
+      printer.scale.set(0.32, 0.32, 0.32);
+      printer.rotation.y = -0.38;
+      printer.position.set(0.1, 0.84, 0.3);
+      scene.add(printer);
+
+      // ============================================================
+      //  3.5 暗房场景：深木书桌 + 台灯 + 墙壁 + 地板
+      // ============================================================
+      var matDarkWood = new THREE.MeshStandardMaterial({ color: 0x2a1a0e, roughness: 0.85, metalness: 0.05 });
+      var matWallDark = new THREE.MeshStandardMaterial({ color: 0x14110e, roughness: 0.95, metalness: 0.0 });
+      var matFloorDark = new THREE.MeshStandardMaterial({ color: 0x0e0a06, roughness: 0.9, metalness: 0.0 });
+      var matLampMetal = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.3, metalness: 0.8, envMapIntensity: 0.5 });
+      var matLampShade = new THREE.MeshStandardMaterial({ color: 0x2a6e2a, roughness: 0.6, metalness: 0.3, side: THREE.DoubleSide });
+
+      // 后墙
+      var backWall = new THREE.Mesh(new THREE.PlaneGeometry(16, 10), matWallDark);
+      backWall.position.set(0, 3, -5);
+      scene.add(backWall);
+
+      // 左墙
+      var leftWall = new THREE.Mesh(new THREE.PlaneGeometry(12, 10), matWallDark);
+      leftWall.position.set(-6, 3, 0);
+      leftWall.rotation.y = Math.PI / 2;
+      scene.add(leftWall);
+
+      // 地板
+      var floor = new THREE.Mesh(new THREE.PlaneGeometry(16, 12), matFloorDark);
+      floor.rotation.x = -Math.PI / 2;
+      floor.position.set(0, -0.02, 0);
+      floor.receiveShadow = true;
+      scene.add(floor);
+
+      // 深木书桌
+      var deskGroup = new THREE.Group();
+      deskGroup.position.set(0.3, 0, -0.5);
+      scene.add(deskGroup);
+
+      var deskTop = new THREE.Mesh(new THREE.BoxGeometry(6.5, 0.12, 3.5), matDarkWood);
+      deskTop.position.set(0, 0.78, 0);
+      deskTop.receiveShadow = true;
+      deskTop.castShadow = true;
+      deskGroup.add(deskTop);
+
+      var deskFront = new THREE.Mesh(new THREE.BoxGeometry(6.5, 0.72, 0.08), matDarkWood);
+      deskFront.position.set(0, 0.42, 1.72);
+      deskGroup.add(deskFront);
+
+      for (var li = -1; li <= 1; li += 2) {
+        var leg = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.78, 0.12), matDarkWood);
+        leg.position.set(li * 3.0, 0.39, -1.6);
+        leg.castShadow = true;
+        deskGroup.add(leg);
+      }
+
+      // 墨水瓶（桌面小物件暗示）
+      var matInkBottle = new THREE.MeshStandardMaterial({ color: 0x1a1a2a, roughness: 0.4, metalness: 0.3 });
+      var inkBottle = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.18, 8), matInkBottle);
+      inkBottle.position.set(-1.8, 0.93, -0.8);
+      deskGroup.add(inkBottle);
+
+      // 咖啡杯暗示
+      var matCup = new THREE.MeshStandardMaterial({ color: 0x3a2a1a, roughness: 0.7, metalness: 0.1 });
+      var cup = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.1, 0.2, 10), matCup);
+      cup.position.set(2.2, 0.94, -1.0);
+      deskGroup.add(cup);
+
+      // 台灯（右侧偏后，若隐若现）
+      var lampGroup = new THREE.Group();
+      lampGroup.position.set(2.0, 0.84, -1.2);
+      deskGroup.add(lampGroup);
+
+      var lampBase = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 0.06, 16), matLampMetal);
+      lampBase.position.set(0, 0.03, 0);
+      lampGroup.add(lampBase);
+
+      var lampArm1 = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 1.2, 8), matLampMetal);
+      lampArm1.position.set(0, 0.63, 0);
+      lampGroup.add(lampArm1);
+
+      var lampArm2 = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.8, 8), matLampMetal);
+      lampArm2.position.set(-0.3, 1.15, 0.15);
+      lampArm2.rotation.z = 0.7;
+      lampGroup.add(lampArm2);
+
+      var lampShade = new THREE.Mesh(new THREE.ConeGeometry(0.25, 0.22, 16, 1, true), matLampShade);
+      lampShade.position.set(-0.6, 1.35, 0.2);
+      lampShade.rotation.z = 0.3;
+      lampGroup.add(lampShade);
+
+      // 台灯发出的微弱黄晕（点光源）
+      var lampGlow = new THREE.PointLight(0xffcc66, 2.5, 6, 1.5);
+      lampGlow.position.set(-0.6, 1.2, 0.2);
+      lampGlow.castShadow = false;
+      lampGroup.add(lampGlow);
+
+      // 灯泡微光球
+      var matBulbGlow = new THREE.MeshBasicMaterial({ color: 0xffdd88, transparent: true, opacity: 0.25 });
+      var bulbGlow = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8), matBulbGlow);
+      bulbGlow.position.set(-0.6, 1.28, 0.2);
+      lampGroup.add(bulbGlow);
+
+      // 灯光光晕（sprite）
+      var glowCanvas = document.createElement('canvas');
+      glowCanvas.width = 128; glowCanvas.height = 128;
+      var glowCtx = glowCanvas.getContext('2d');
+      var glowGrad = glowCtx.createRadialGradient(64, 64, 0, 64, 64, 64);
+      glowGrad.addColorStop(0, 'rgba(255,220,120,0.6)');
+      glowGrad.addColorStop(0.3, 'rgba(255,200,80,0.2)');
+      glowGrad.addColorStop(1, 'rgba(255,180,60,0)');
+      glowCtx.fillStyle = glowGrad;
+      glowCtx.fillRect(0, 0, 128, 128);
+      var glowTex = new THREE.CanvasTexture(glowCanvas);
+      var glowSpriteMat = new THREE.SpriteMaterial({ map: glowTex, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending });
+      var glowSprite = new THREE.Sprite(glowSpriteMat);
+      glowSprite.position.set(-0.6, 1.2, 0.2);
+      glowSprite.scale.set(2.5, 2.5, 1);
+      lampGroup.add(glowSprite);
+
+      // ---- 4.1 底座与支架 ----
+      var basePlate = new THREE.Mesh(new THREE.BoxGeometry(7.0, 0.3, 5.6), matCastIron);
+      basePlate.position.set(0, 0.15, 0);
+      basePlate.castShadow = true; basePlate.receiveShadow = true;
+      printer.add(basePlate);
+
+      for (var side = -1; side <= 1; side += 2) {
+        var frame = new THREE.Mesh(new THREE.BoxGeometry(0.25, 2.4, 4.2), matCastIron);
+        frame.position.set(side * 3.2, 1.3, -0.2);
+        frame.castShadow = true; frame.receiveShadow = true;
+        printer.add(frame);
+        for (var i = 0; i < 3; i++) {
+          var hole = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.3, 12), matBlackMatte);
+          hole.position.set(side * 3.2, 0.8 + i * 0.7, -0.8 + i * 0.6);
+          printer.add(hole);
+        }
+      }
+
+      var apron = new THREE.Mesh(new THREE.BoxGeometry(5.8, 0.6, 1.2), matBlackGloss);
+      apron.position.set(0, 0.75, 1.7);
+      apron.castShadow = true;
+      printer.add(apron);
+
+      var rearCasing = new THREE.Mesh(new THREE.BoxGeometry(5.6, 1.2, 0.8), matBlackGloss);
+      rearCasing.position.set(0, 1.4, -2.8);
+      printer.add(rearCasing);
+
+      var keyPanel = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.1, 2.8), matBlackMatte);
+      keyPanel.position.set(0, 0.55, 1.2);
+      keyPanel.receiveShadow = true;
+      printer.add(keyPanel);
+
+      // ---- 4.2 横向联动杆 ----
+      var uBar = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 4.6, 16), matSteel);
+      uBar.rotation.z = Math.PI / 2;
+      uBar.position.set(0, 0.85, 0.5);
+      printer.add(uBar);
+      for (var ui = -1; ui <= 1; ui += 2) {
+        var bracket = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.15, 0.04), matSilver);
+        bracket.position.set(ui * 2.2, 0.85, 0.5);
+        printer.add(bracket);
+      }
+      for (var li = -2; li <= 2; li++) {
+        var link = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.02, 0.5, 6), matSteel);
+        link.position.set(li * 0.9, 1.1, -0.2);
+        link.rotation.x = 0.2;
+        printer.add(link);
+      }
+
+      // ---- 4.3 键盘与连杆 ----
+      var keyRows = [
+        ['Q','W','E','R','T','Y','U','I','O','P'],
+        ['A','S','D','F','G','H','J','K','L',';'],
+        ['Z','X','C','V','B','N','M',',','.','/']
+      ];
+      var hammerGroups = [];
+
+      keyRows.forEach(function(row, rIdx) {
+        var offsetX = (rIdx === 0) ? 0 : (rIdx === 1) ? 0.15 : 0.3;
+        var zPos = 1.6 - rIdx * 0.4;
+        row.forEach(function(ch, cIdx) {
+          var xPos = -2.1 + cIdx * 0.44 + offsetX;
+          var yBase = 0.6;
+
+          var keyBase = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.22, 0.1, 20), matBlackGloss);
+          keyBase.position.set(xPos, yBase, zPos);
+          printer.add(keyBase);
+
+          var canvas = document.createElement('canvas');
+          canvas.width = 64; canvas.height = 64;
+          var ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(32, 32, 28, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = '#f5f2ea'; ctx.beginPath(); ctx.arc(32, 32, 24, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = '#111'; ctx.font = 'bold 20px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText(ch, 32, 34);
+          var tex = new THREE.CanvasTexture(canvas);
+          var keyCap = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.2, 0.06, 20),
+            new THREE.MeshStandardMaterial({ map: tex, roughness: 0.3 }));
+          keyCap.position.set(xPos, yBase + 0.08, zPos);
+          printer.add(keyCap);
+
+          var p1 = new THREE.Vector3(xPos, yBase - 0.05, zPos);
+          var p2 = new THREE.Vector3(xPos * 0.7, 0.85, 0.5);
+          var mid = new THREE.Vector3((p1.x+p2.x)/2, (p1.y+p2.y)/2 - 0.15, (p1.z+p2.z)/2);
+          var curve = new THREE.QuadraticBezierCurve3(p1, mid, p2);
+          var tube = new THREE.TubeGeometry(curve, 8, 0.015, 6, false);
+          var lever = new THREE.Mesh(tube, matSteel);
+          lever.castShadow = true;
+          printer.add(lever);
+        });
+      });
+
+      // ---- 4.4 字锤 ----
+      var basketGroup = new THREE.Group();
+      basketGroup.position.set(0, 0.0, 0);
+      printer.add(basketGroup);
+      var hammerChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'.split('');
+      var hammerCount = 36;
+      var baseAngle = -0.65;
+      var angleRange = 1.3;
+
+      for (var hi = 0; hi < hammerCount; hi++) {
+        var t = hi / hammerCount;
+        var angle = baseAngle + t * angleRange;
+        var radius = 0.8;
+        var hx = radius * Math.sin(angle);
+        var hz = -1.9 + radius * (1 - Math.cos(angle)) * 0.6;
+        var hy = 0.95 + 0.35 * (1 - Math.abs(Math.sin(angle)));
+
+        var hg = new THREE.Group();
+        hg.position.set(hx, hy, hz);
+
+        var rod = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.025, 0.6, 6), matSteel);
+        rod.position.set(0, 0.3, 0);
+        rod.rotation.x = 0.15;
+        rod.castShadow = true;
+        hg.add(rod);
+
+        var head = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.025, 0.025), matBrass);
+        head.position.set(0, 0.62, 0.04);
+        hg.add(head);
+
+        var spring = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.12, 4), matSilver);
+        spring.position.set(0.02, 0.15, -0.05);
+        spring.rotation.x = 0.6;
+        hg.add(spring);
+
+        var data = {
+          group: hg, rod: rod, head: head,
+          currentRotX: 0.05,
+          targetRotX: 0.05,
+          char: hammerChars[hi % hammerChars.length],
+          index: hi
+        };
+        hammerGroups.push(data);
+        basketGroup.add(hg);
+        hg.rotation.x = 0.05;
+        hg.rotation.z = angle * 0.3;
+      }
+
+      // ---- 4.5 棘轮与字车 ----
+      var escapementGroup = new THREE.Group();
+      escapementGroup.position.set(2.8, 1.1, -1.4);
+      printer.add(escapementGroup);
+      var numTeeth = 16;
+      var ratchetBase = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.12, 32), matBlackMatte);
+      ratchetBase.rotation.x = Math.PI / 2;
+      escapementGroup.add(ratchetBase);
+      var teethGroup = new THREE.Group();
+      for (var ti = 0; ti < numTeeth; ti++) {
+        var ta = (ti / numTeeth) * Math.PI * 2;
+        var tooth = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.04, 0.12), matBrass);
+        tooth.position.set(0.42 * Math.cos(ta), 0.42 * Math.sin(ta), 0);
+        tooth.rotation.z = ta;
+        teethGroup.add(tooth);
+      }
+      escapementGroup.add(teethGroup);
+      var pawlGroup = new THREE.Group();
+      pawlGroup.position.set(0.65, 0.1, 0);
+      var pawlArm = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.025, 0.3, 6), matSteel);
+      pawlArm.rotation.x = Math.PI / 2;
+      pawlArm.position.set(0.15, 0, 0);
+      pawlGroup.add(pawlArm);
+      var pawlTip = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6), matSilver);
+      pawlTip.position.set(0.3, 0, 0);
+      pawlGroup.add(pawlTip);
+      escapementGroup.add(pawlGroup);
+
+      var carriageGroup = new THREE.Group();
+      carriageGroup.position.set(0, 0, 0);
+      printer.add(carriageGroup);
+
+      var platen = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 4.8, 24), matDarkRubber);
+      platen.rotation.z = Math.PI / 2;
+      platen.position.set(0, 2.2, -2.6);
+      platen.castShadow = true;
+      carriageGroup.add(platen);
+      var axle = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 5.0, 12), matSilver);
+      axle.rotation.z = Math.PI / 2;
+      axle.position.set(0, 2.2, -2.6);
+      carriageGroup.add(axle);
+
+      for (var bi = -1; bi <= 1; bi += 2) {
+        var bail = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.8, 8), matSilver);
+        bail.position.set(bi * 1.2, 2.5, -2.4);
+        bail.rotation.x = 0.2;
+        carriageGroup.add(bail);
+      }
+
+      var paper = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 5.2), matPaper);
+      paper.position.set(0, 3.0, -2.55);
+      paper.rotation.x = -0.15;
+      paper.castShadow = true;
+      paper.receiveShadow = true;
+      carriageGroup.add(paper);
+
+      // ---- 4.6 色带 ----
+      var spoolPos = [[-2.4, 1.4, -1.8], [2.4, 1.4, -1.8]];
+      var spools = [];
+      spoolPos.forEach(function(pos) {
+        var g = new THREE.Group();
+        var base = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.08, 12), matBlackMatte);
+        base.rotation.x = Math.PI/2; g.add(base);
+        var top = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.22, 0.04, 12), matBrass);
+        top.rotation.x = Math.PI/2; top.position.y = 0.06; g.add(top);
+        var core = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.18, 8), matSilver);
+        core.rotation.x = Math.PI/2; g.add(core);
+        g.position.set(pos[0], pos[1], pos[2]);
+        printer.add(g);
+        spools.push(g);
+      });
+
+      var pts = [
+        new THREE.Vector3(-2.4, 1.45, -1.7),
+        new THREE.Vector3(-0.8, 1.55, -1.4),
+        new THREE.Vector3(0, 1.6, -1.3),
+        new THREE.Vector3(0.8, 1.55, -1.4),
+        new THREE.Vector3(2.4, 1.45, -1.7)
+      ];
+      var ribbonCurve = new THREE.CatmullRomCurve3(pts);
+      var ribbonTube = new THREE.TubeGeometry(ribbonCurve, 32, 0.025, 6, false);
+      var ribbonMesh = new THREE.Mesh(ribbonTube, matRibbon);
+      printer.add(ribbonMesh);
+
+      var vibGroup = new THREE.Group();
+      vibGroup.position.set(0, 1.6, -1.3);
+      var vibL = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.15, 0.04), matSilver);
+      vibL.position.set(-0.14, 0.08, 0); vibGroup.add(vibL);
+      var vibR = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.15, 0.04), matSilver);
+      vibR.position.set(0.14, 0.08, 0); vibGroup.add(vibR);
+      printer.add(vibGroup);
+
+      // ---- 4.7 回车与铃 ----
+      var returnGroup = new THREE.Group();
+      returnGroup.position.set(-2.8, 1.3, -1.9);
+      var rJoint = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12), matBrass);
+      returnGroup.add(rJoint);
+      var rRod = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.6, 8), matSilver);
+      rRod.position.set(-0.6, 0.8, 0);
+      rRod.rotation.z = -0.4;
+      returnGroup.add(rRod);
+      var rHandle = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.6, 8), matDarkRubber);
+      rHandle.position.set(-1.4, 1.4, 0);
+      rHandle.rotation.x = Math.PI/2;
+      returnGroup.add(rHandle);
+      printer.add(returnGroup);
+
+      var bellGroup = new THREE.Group();
+      bellGroup.position.set(2.8, 2.6, -1.0);
+      var bellBody = new THREE.Mesh(new THREE.SphereGeometry(0.25, 16, 12, 0, Math.PI*2, 0, Math.PI/2), matBrass);
+      bellBody.rotation.x = -0.2;
+      bellGroup.add(bellBody);
+      var bellHammer = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.025, 0.2, 6), matSteel);
+      bellHammer.position.set(0.2, 0.15, 0.05);
+      bellHammer.rotation.z = 0.3;
+      bellGroup.add(bellHammer);
+      printer.add(bellGroup);
+
+      // ---- 4.8 色带盖板 + 色带窗口 ----
+      var matRibbonCover = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.2, metalness: 0.7, envMapIntensity: 0.8 });
+      var ribbonCover = new THREE.Mesh(new THREE.BoxGeometry(5.0, 0.12, 0.8), matRibbonCover);
+      ribbonCover.position.set(0, 1.75, -1.5);
+      ribbonCover.castShadow = true;
+      printer.add(ribbonCover);
+
+      var matRibbonWindow = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.1, metalness: 0.3, transparent: true, opacity: 0.6 });
+      var ribbonWindow = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.08, 0.4), matRibbonWindow);
+      ribbonWindow.position.set(0, 1.82, -1.3);
+      printer.add(ribbonWindow);
+
+      // ---- 4.9 纸张压条（纸导轨） ----
+      var paperGuideL = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 4.4, 8), matSilver);
+      paperGuideL.rotation.z = Math.PI / 2;
+      paperGuideL.position.set(0, 2.85, -3.0);
+      printer.add(paperGuideL);
+      var paperGuideR = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 4.4, 8), matSilver);
+      paperGuideR.rotation.z = Math.PI / 2;
+      paperGuideR.position.set(0, 2.85, -2.7);
+      printer.add(paperGuideR);
+
+      // ---- 4.10 换行扳手 ----
+      var returnLeverGroup = new THREE.Group();
+      returnLeverGroup.position.set(-3.2, 1.2, -0.5);
+      var leverArm = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.8, 8), matSilver);
+      leverArm.position.set(0, 0.9, 0);
+      leverArm.rotation.z = -0.5;
+      returnLeverGroup.add(leverArm);
+      var leverHandle = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.5, 8), matDarkRubber);
+      leverHandle.position.set(-0.7, 1.55, 0);
+      leverHandle.rotation.z = -0.5;
+      returnLeverGroup.add(leverHandle);
+      printer.add(returnLeverGroup);
+
+      // ---- 4.11 滚筒大旋钮 ----
+      for (var ki = -1; ki <= 1; ki += 2) {
+        var knobGroup = new THREE.Group();
+        knobGroup.position.set(ki * 2.7, 2.2, -2.6);
+        var knobCore = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.15, 16), matBlackGloss);
+        knobCore.rotation.z = Math.PI / 2;
+        knobGroup.add(knobCore);
+        var knobRim = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.03, 8, 16), matSilver);
+        knobRim.rotation.y = Math.PI / 2;
+        knobGroup.add(knobRim);
+        for (var kgi = 0; kgi < 8; kgi++) {
+          var knobGrip = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.08, 0.04), matSilver);
+          var kga = (kgi / 8) * Math.PI * 2;
+          knobGrip.position.set(0, 0.14 * Math.cos(kga), 0.14 * Math.sin(kga));
+          knobGrip.rotation.x = kga;
+          knobGroup.add(knobGrip);
+        }
+        printer.add(knobGroup);
+      }
+
+      // ---- 4.12 空格键 + Shift键 ----
+      var spaceBar = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.08, 0.3), matBlackGloss);
+      spaceBar.position.set(0, 0.58, 2.4);
+      printer.add(spaceBar);
+      var spaceBarCap = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.03, 0.22), matDarkRubber);
+      spaceBarCap.position.set(0, 0.63, 2.4);
+      printer.add(spaceBarCap);
+
+      for (var shi = -1; shi <= 1; shi += 2) {
+        var shiftKey = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.08, 0.3), matBlackGloss);
+        shiftKey.position.set(shi * 2.1, 0.58, 2.0);
+        printer.add(shiftKey);
+        var shiftCap = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.25, 0.05, 16), matDarkRubber);
+        shiftCap.position.set(shi * 2.1, 0.64, 2.0);
+        printer.add(shiftCap);
+      }
+
+      // ---- 4.13 铭牌 ----
+      var matNameplate = new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.15, metalness: 0.95, envMapIntensity: 2.0 });
+      var nameplate = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.02, 0.4), matNameplate);
+      nameplate.position.set(0, 0.32, 2.8);
+      printer.add(nameplate);
+      var npCanvas = document.createElement('canvas');
+      npCanvas.width = 256; npCanvas.height = 64;
+      var npCtx = npCanvas.getContext('2d');
+      npCtx.fillStyle = '#c8a832';
+      npCtx.fillRect(0, 0, 256, 64);
+      npCtx.fillStyle = '#1a1a1a';
+      npCtx.font = 'bold 28px serif';
+      npCtx.textAlign = 'center';
+      npCtx.textBaseline = 'middle';
+      npCtx.fillText('LEMON WORKS', 128, 32);
+      var npTex = new THREE.CanvasTexture(npCanvas);
+      var nameplateText = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 0.3),
+        new THREE.MeshStandardMaterial({ map: npTex, roughness: 0.2, metalness: 0.9 }));
+      nameplateText.position.set(0, 0.34, 2.8);
+      nameplateText.rotation.x = -0.05;
+      printer.add(nameplateText);
+
+      // ============================================================
+      //  5. 交互（打字队列 + 自动演示）
+      // ============================================================
+      var isAnimating = false;
+      var queue = [];
+      var carriageOffset = 0;
+      var maxCarriageOffset = 2.4;
+      var ratchetAngle = 0;
+
+      function triggerHit(idx) {
+        if (isAnimating && queue.length > 8) return;
+        queue.push(idx);
+        if (!isAnimating) processQueue();
+      }
+
+      function processQueue() {
+        if (queue.length === 0) { isAnimating = false; return; }
+        isAnimating = true;
+        var idx = queue.shift();
+        var hammer = hammerGroups[idx % hammerGroups.length];
+        if (!hammer) { processQueue(); return; }
+
+        hammer.targetRotX = -0.6;
+        var step = (Math.PI * 2) / numTeeth;
+        ratchetAngle += step;
+        teethGroup.rotation.z = ratchetAngle;
+        pawlGroup.rotation.z = 0.3 + Math.sin(ratchetAngle * 2) * 0.1;
+        spools.forEach(function(s, i) { s.rotation.y += (i === 0) ? 0.2 : -0.2; });
+        carriageOffset += 0.1;
+        if (carriageOffset > maxCarriageOffset) carriageOffset = -0.5;
+        carriageGroup.position.x = carriageOffset;
+        vibGroup.position.y = 1.6 + Math.random() * 0.06;
+        if (carriageOffset > maxCarriageOffset - 0.5) {
+          bellGroup.rotation.z = 0.08;
+          setTimeout(function() { bellGroup.rotation.z = 0; }, 200);
+        }
+        var tip = document.getElementById('statusTip');
+        if (tip) tip.textContent = '◈ 击打: ' + hammer.char + '  |  字车: ' + Math.round(carriageOffset / maxCarriageOffset * 100) + '% ◈';
+        setTimeout(function() { hammer.targetRotX = 0.05; }, 200);
+        setTimeout(function() { processQueue(); }, 250);
+      }
+
+      window.addEventListener('keydown', function(e) {
+        var key = e.key.toUpperCase();
+        if (key.length === 1 && key >= 'A' && key <= 'Z') {
+          var kIdx = key.charCodeAt(0) - 65;
+          if (kIdx < hammerGroups.length) { triggerHit(kIdx); return; }
+        }
+        if (key >= '0' && key <= '9') {
+          var kIdx2 = 26 + parseInt(key, 10);
+          if (kIdx2 < hammerGroups.length) triggerHit(kIdx2);
+        }
+        if (e.key === ' ') triggerHit(Math.floor(Math.random() * hammerGroups.length));
+      });
+
+      // 自动演示：循环打字，让壁纸保持"活着"
+      function startAutoDemo() {
+        var phrase = 'FOCUS MOMENT ';
+        var pi = 0;
+        setInterval(function() {
+          var c = phrase[pi % phrase.length];
+          var idx;
+          if (c >= 'A' && c <= 'Z') idx = c.charCodeAt(0) - 65;
+          else idx = Math.floor(Math.random() * hammerGroups.length);
+          triggerHit(idx);
+          pi++;
+        }, 340);
+      }
+      startAutoDemo();
+
+      // ============================================================
+      //  6. 动画循环
+      // ============================================================
+      var clock = new THREE.Clock();
+      var elapsed = 0;
+
+      function animate() {
+        requestAnimationFrame(animate);
+        var dt = Math.min(clock.getDelta(), 0.05);
+        elapsed += dt;
+
+        hammerGroups.forEach(function(h) {
+          h.currentRotX += (h.targetRotX - h.currentRotX) * 0.2;
+          h.group.rotation.x = h.currentRotX;
+        });
+        runPostProcess(elapsed);
+      }
+      animate();
+
+      console.log('专注时刻 · 电影级机械打字机已启动');
+    } catch (err) {
+      var errDiv = document.createElement('div');
+      errDiv.className = 'err';
+      errDiv.textContent = '3D 场景错误: ' + err.message;
+      document.body.appendChild(errDiv);
+      console.error('3D scene error:', err);
+    }
+  </script>
+</body>
+</html>

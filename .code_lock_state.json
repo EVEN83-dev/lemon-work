@@ -1,0 +1,18 @@
+{
+  "verified": true,
+  "file_hashes": {
+    "standard_mode/core/serve_bridge.py": "34796811e95e7dbf22aacfbf13eb43517c2d58e6d692ecdfd9ad23c5a263d64d",
+    "standard_mode/core/engine_manager.py": "dcdab6482578b8db6cc5ed0a37a40a5038c43abff83918ab405baf53e8a42e11",
+    "standard_mode/core/ollama_engine.py": "edaff3db2ab9508dc76701f63858d7e3d4b45471487fdc274b133e06b3b171cd",
+    "standard_mode/core/ollama_bridge.py": "e63322673537ff469e58677729a10d3d010256191aa58b1a5e585ae4cc89fcd9",
+    "standard_mode/core/mimo_engine.py": "dd75d6928f9727c6ccf4fe1b50327613c6daaba32f4e4c47f172dcfe88e2126a",
+    "standard_mode/core/agent_engine.py": "b9e57f1840c69e225dbfb722af24b49d4ddb587c467872d099d9d4bb229a6d2e",
+    "standard_mode/ui/mimo_panel.py": "451da9bbb818cd5ce3ac0674fd7f11484ea8409234a31815a766a8cf70f3eb37",
+    "standard_mode/ui/main_window.py": "f79a270c507fe7fd97dec3ef27556589203223fcaa5a79c8af15b4f1a2001fd3",
+    "standard_mode/ui/mimo_page.html": "272e7b8dd5ab4c60df3647fef5f3d8a1a811733962efd1c97e27092aca6394d6",
+    "standard_mode/main.py": "57b5905adfd45e3025074ba363f8d6532af436c22a66c6ebd7d1b4ce9a6c13d5"
+  },
+  "locked": true,
+  "last_verify_time": "2026-11-02 20:43:48",
+  "hash_saved_time": "2026-11-01 21:40:46"
+}

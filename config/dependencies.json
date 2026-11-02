@@ -1,0 +1,66 @@
+{
+  "version": "1.0",
+  "last_updated": "2026-07-16T09:23:37.109788",
+  "dependencies": {
+    "mimocode": {
+      "name": "mimocode",
+      "type": "mimocode",
+      "installed": true,
+      "path": "d:\\xiaomi_temp\\mimo_agent\\bin\\mimo.exe",
+      "version": "",
+      "running": false,
+      "host": "http://localhost:4097",
+      "api_key": "",
+      "last_checked": "",
+      "configured_manually": false,
+      "description": "小米 MIMO Code 云端 AI 编程工具 — 提供复杂工程任务处理能力",
+      "download_url": "https://code.xiaomi.com/download",
+      "common_paths": [
+        "d:\\xiaomi_temp\\mimo_agent\\bin\\mimo.exe",
+        "d:\\xiaomi_temp\\mimo_agent\\mimo.exe",
+        "C:\\Program Files\\MIMO Code\\mimo.exe",
+        "C:\\Program Files (x86)\\MIMO Code\\mimo.exe",
+        "C:\\Users\\Legion\\AppData\\Local\\Programs\\MIMO Code\\mimo.exe",
+        "/usr/local/bin/mimo",
+        "/usr/bin/mimo"
+      ]
+    },
+    "ollama": {
+      "name": "ollama",
+      "type": "ollama",
+      "installed": true,
+      "path": "C:\\Users\\Legion\\AppData\\Local\\Temp\\tmpla437h70.exe",
+      "version": "",
+      "running": true,
+      "host": "http://localhost:11434",
+      "api_key": "",
+      "last_checked": "2026-07-16T09:23:37.109329",
+      "configured_manually": true,
+      "description": "本地 LLM 推理引擎 — 免费运行 qwen3.5 等本地模型",
+      "download_url": "https://ollama.com/download",
+      "common_paths": [
+        "C:\\Users\\Legion\\AppData\\Local\\Programs\\Ollama\\ollama.exe",
+        "C:\\Program Files\\Ollama\\ollama.exe",
+        "C:\\Program Files (x86)\\Ollama\\ollama.exe",
+        "/usr/local/bin/ollama",
+        "/usr/bin/ollama",
+        "/opt/ollama/ollama"
+      ]
+    },
+    "deepseek": {
+      "name": "deepseek",
+      "type": "deepseek",
+      "installed": true,
+      "path": "",
+      "version": "",
+      "running": false,
+      "host": "https://api.deepseek.com",
+      "api_key": "sk-test",
+      "last_checked": "",
+      "configured_manually": true,
+      "description": "DeepSeek 云端 API — 需要 API Key，无需下载可执行文件",
+      "download_url": "https://platform.deepseek.com",
+      "common_paths": []
+    }
+  }
+}

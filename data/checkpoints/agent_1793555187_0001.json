@@ -1,0 +1,14 @@
+{
+  "task_id": "agent_1793555187",
+  "step": 1,
+  "state": {
+    "tool_calls": [
+      "remote_bank_compound"
+    ],
+    "iteration": 1
+  },
+  "metadata": {
+    "engine": "ollama"
+  },
+  "timestamp": 1793555192.795859
+}

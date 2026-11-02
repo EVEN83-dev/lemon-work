@@ -1,0 +1,15 @@
+{
+  "task_id": "agent_1793620502",
+  "step": 1,
+  "state": {
+    "tool_calls": [
+      "remote_bank_products",
+      "remote_wealth_advisor"
+    ],
+    "iteration": 1
+  },
+  "metadata": {
+    "engine": "deepseek"
+  },
+  "timestamp": 1793620503.1551325
+}

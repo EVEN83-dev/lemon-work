@@ -1,0 +1,916 @@
+/* ========================================================
+ * backup_focus_moment.txt
+ * 专注时刻（focus_moment）主题完整备份
+ * 生成时间: 2026-08-02
+ * 来源: mimo_page.html, typewriter_wallpaper.html
+ * ======================================================== */
+
+/* ========================================================
+ * 第一部分：mimo_page.html CSS 规则 (L1656-L1981, L2149-L2165)
+ * ======================================================== */
+
+/* ===== ★ 专注时刻主题（全局） — v3.98 ===== */
+:root[data-festival="focus_moment"] {
+  --theme-name: '专注时刻';
+  --theme-accent: #ff6900;
+  --theme-accent-light: #ffaa55;
+  --theme-bg-overlay: rgba(5, 5, 5, 0.82); /* 更强遮罩，保证内容可读 */
+  --theme-accent-dark: #cc5400;
+  --theme-secondary: #ffd700;
+  --bg-primary: #0a0a0a;
+  --bg-secondary: rgba(26,18,8,0.85);
+  --bg-surface: rgba(45,31,16,0.7);
+  --border-subtle: rgba(255,105,0,0.15);
+  --border-focus: rgba(255,105,0,0.5);
+  --text-primary: #ffe0c0;
+  --text-secondary: #c8a070;
+  --text-muted: #8a6a4a;
+  --accent-rgb: 255,105,0;
+  --neon-green: #ffaa55;
+  --neon-pink: #ffd700;
+}
+[data-festival="focus_moment"] .action-btn:hover {
+  box-shadow: 0 4px 12px rgba(255,105,0,0.4), 0 0 20px rgba(255,170,85,0.3);
+  border-color: rgba(255,105,0,0.4);
+}
+[data-festival="focus_moment"] .mimo-logo-text {
+  background: linear-gradient(135deg, #ff6900, #ffd700);
+  -webkit-background-clip: text;
+  color: transparent;
+}
+[data-festival="focus_moment"] .file-tree,
+[data-festival="focus_moment"] .file-tree-header { background: rgba(26,18,8,0.95); }
+[data-festival="focus_moment"] .file-tree-item:hover { background: rgba(255,105,0,0.1); border-left-color: #ff6900; }
+[data-festival="focus_moment"] .file-tree-item.selected { background: rgba(255,170,85,0.15); border-left-color: #ffd700; }
+[data-festival="focus_moment"] .terminal-panel { background: rgba(26,18,8,0.98); border-top-color: rgba(255,105,0,0.3); }
+[data-festival="focus_moment"] .terminal-tab.active { border-bottom-color: #ff6900; color: #ffaa55; }
+[data-festival="focus_moment"] .settings-panel { background: rgba(26,18,8,0.98); }
+[data-festival="focus_moment"] .settings-tab.active { border-bottom-color: #ff6900; color: #ffaa55; }
+[data-festival="focus_moment"] .setting-toggle.on { background: #ff6900; }
+[data-festival="focus_moment"] .todo-panel { background: rgba(26,18,8,0.98); border-left-color: #ffd700; }
+[data-festival="focus_moment"] .todo-item:hover { background: rgba(255,105,0,0.1); }
+[data-festival="focus_moment"] .input-container textarea:focus { border-color: #ff6900; box-shadow: 0 0 0 2px rgba(255,105,0,0.2); }
+[data-festival="focus_moment"] .send-btn:hover { background: #ffd700; }
+/* ★ v12.8: 对话消息真实类名（.msg-user/.msg-ai/.ai-content）的主题覆盖
+   — 替换掉旧的 .ai-message/.user-message（已不存在于代码中）*/
+[data-festival="focus_moment"] .msg-user .msg-bubble {
+  background: rgba(255,105,0,0.15);
+  border-color: rgba(255,105,0,0.3);
+  color: #ffe0c0;
+}
+[data-festival="focus_moment"] .msg-ai {
+  color: #ffe0c0;
+}
+[data-festival="focus_moment"] .msg-ai .ai-content {
+  color: #ffe0c0;
+}
+[data-festival="focus_moment"] .msg-ai h1,
+[data-festival="focus_moment"] .msg-ai h2,
+[data-festival="focus_moment"] .msg-ai h3 { color: #ffaa55; }
+[data-festival="focus_moment"] .msg-ai code { color: #ffd700; }
+[data-festival="focus_moment"] .msg-ai pre { background: rgba(26,18,8,0.92); border-color: rgba(255,105,0,0.3); }
+[data-festival="focus_moment"] .msg-ai blockquote { border-left-color: #ff6900; background: rgba(255,105,0,0.08); }
+[data-festival="focus_moment"] .thinking-inline { border-left-color: #ffd700; }
+[data-festival="focus_moment"] .codehilite { border-left-color: #ff6900; }
+[data-festival="focus_moment"] .code-toolbar-btn.run-btn:hover { background: #ff6900; }
+[data-festival="focus_moment"] h1, [data-festival="focus_moment"] h2, [data-festival="focus_moment"] h3 { color: #ffaa55; }
+[data-festival="focus_moment"] .panel-title { color: #ff6900; }
+
+/* ★ v4.0.3/6: 专注时刻主题 — mimo-panel 透明让壁纸透出
+   ★ v12.6: 删除 focus_moment 专属 #content 覆盖规则！
+   - 该规则设置 min-height:100% 破坏了 flex 布局（通用规则是 min-height:0）
+   - 该规则缺失 flex:1 1 0、display:flex、flex-direction:column、isolation:isolate
+   - 导致聊天界面与海洋/星空壁纸的布局完全不同
+   - 通用 #content 规则已提供 z-index:100 + isolation:isolate 保护
+   - 背景不透明度 0.78 已足够让壁纸透出同时保持 UI 清晰 */
+:root[data-festival="focus_moment"] .mimo-panel {
+  background: transparent !important;
+  min-height: 0;  /* ★ v4.1.3: 让 mimo-panel 在 flex 父容器中正确伸缩 */
+}
+:root[data-festival="focus_moment"] .logo-area {
+  position: relative;
+  z-index: 30;  /* ★ v4.1.3: 确保 logo 在 typewriterfield 之上 */
+}
+/* ★ v12.8: 对话框周围元素（workspace-bar/session-bar）主题化
+   — 使用 focus_moment 专属颜色，与对话栏保持视觉一致 */
+:root[data-festival="focus_moment"] .workspace-bar {
+  background: rgba(26,18,8,0.92);
+  border-color: rgba(255,105,0,0.25);
+  color: #ffe0c0;
+}
+:root[data-festival="focus_moment"] .workspace-selector,
+:root[data-festival="focus_moment"] .workspace-name,
+:root[data-festival="focus_moment"] .workspace-arrow {
+  color: #ffe0c0;
+}
+:root[data-festival="focus_moment"] .workspace-selector:hover {
+  background: rgba(255,105,0,0.1);
+}
+:root[data-festival="focus_moment"] .session-bar {
+  background: rgba(26,18,8,0.92);
+  border-color: rgba(255,105,0,0.25);
+  backdrop-filter: blur(8px);
+}
+:root[data-festival="focus_moment"] .session-label,
+:root[data-festival="focus_moment"] .model-label,
+:root[data-festival="focus_moment"] .mode-label-sm {
+  color: rgba(255,224,192,0.85);
+}
+:root[data-festival="focus_moment"] .session-label:hover,
+:root[data-festival="focus_moment"] .model-label:hover {
+  background: rgba(255,105,0,0.2);
+  color: #ffaa55;
+}
+:root[data-festival="focus_moment"] .session-dot { color: rgba(255,224,192,0.3); }
+:root[data-festival="focus_moment"] .session-btn {
+  background: rgba(255,105,0,0.15);
+  border-color: rgba(255,105,0,0.4);
+  color: #ffaa55;
+}
+:root[data-festival="focus_moment"] .session-btn:hover {
+  background: rgba(255,105,0,0.28);
+}
+:root[data-festival="focus_moment"] .input-area {
+  z-index: 40 !important;  /* ★ v4.1.3: 输入区在 iframe 之上 */
+  background: rgba(26,18,8,0.96);
+}
+:root[data-festival="focus_moment"] .input-box {
+  background: rgba(32,22,12,0.96);
+  border-color: rgba(255,105,0,0.3);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.65), 0 0 24px rgba(255,105,0,0.08);
+}
+:root[data-festival="focus_moment"] .input-box:focus-within {
+  border-color: rgba(255,105,0,0.7);
+  box-shadow: 0 0 30px rgba(255,105,0,0.2), 0 8px 32px rgba(0,0,0,0.65);
+}
+:root[data-festival="focus_moment"] .input-box textarea#inputField {
+  color: #ffe0c0;
+}
+:root[data-festival="focus_moment"] .mode-row { color: rgba(255,224,192,0.6); }
+:root[data-festival="focus_moment"] .send-btn {
+  background: linear-gradient(135deg, #ff6900, #ffd700);
+  color: #1a0a00;
+  border: none;
+}
+:root[data-festival="focus_moment"] .send-btn:hover {
+  background: linear-gradient(135deg, #ff8533, #ffd700);
+  box-shadow: 0 4px 16px rgba(255,105,0,0.4);
+}
+/* ★ v4.1.33: 专注时刻纯 CSS 桌面装饰条 — 物理嵌入 #content 内部
+   （不再是 iframe / body::after），与聊天界面元素共享 stacking context，
+   z-index:0 严格低于 #content 内其他 z-index:1 的 flex 子元素，
+   物理上不可能再覆盖 input-area / session-bar / 统计条 / commit 行。 */
+#focus-moment-wallpaper {
+  display: none;  /* 默认隐藏，仅 focus_moment 主题下显示 */
+}
+:root[data-festival="focus_moment"] #focus-moment-wallpaper {
+  display: none !important;  /* ★ v12.2: 禁用旧 CSS 装饰，改用 Three.js iframe */
+}
+:root[data-festival="focus_moment"] #typewriterfield {
+  display: block !important;
+}
+/* ★ v12.5: 移除！原 #content > * 强制 position:relative 破坏了聊天界面布局
+   #content 已有 z-index:100 + isolation:isolate，子元素自动在壁纸之上 */
+/* 装饰元素：暖色光晕 + 台灯 + 键盘条 + 闪烁打字机光标 */
+:root[data-festival="focus_moment"] #focus-moment-wallpaper .fmw-glow {
+  position: absolute;
+  top: -30%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 70%;
+  height: 160%;
+  background: radial-gradient(circle, rgba(255, 200, 120, 0.35) 0%, rgba(255, 170, 85, 0.1) 40%, transparent 70%);
+  filter: blur(8px);
+  pointer-events: none;
+}
+:root[data-festival="focus_moment"] #focus-moment-wallpaper .fmw-lamp {
+  position: absolute;
+  left: 18%;
+  top: -10%;
+  width: 60px;
+  height: 60px;
+  background: radial-gradient(circle, rgba(255, 235, 180, 0.95) 0%, rgba(255, 180, 90, 0.55) 35%, transparent 70%);
+  border-radius: 50%;
+  filter: blur(1px);
+  pointer-events: none;
+  animation: fmwLampFlicker 4s ease-in-out infinite;
+}
+:root[data-festival="focus_moment"] #focus-moment-wallpaper .fmw-key {
+  position: absolute;
+  left: 50%;
+  bottom: 12%;
+  transform: translateX(-50%);
+  width: 320px;
+  height: 18px;
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 220, 160, 0.16) 0 6px, transparent 6px 10px),
+    linear-gradient(180deg, rgba(255, 170, 85, 0.3) 0%, transparent 100%);
+  border-radius: 2px;
+  pointer-events: none;
+  opacity: 0.65;
+}
+:root[data-festival="focus_moment"] #focus-moment-wallpaper .fmw-cursor {
+  position: absolute;
+  right: 32%;
+  bottom: 18%;
+  width: 8px;
+  height: 14px;
+  background: rgba(255, 200, 130, 0.95);
+  box-shadow: 0 0 10px rgba(255, 170, 85, 0.7), 0 0 2px rgba(255, 220, 160, 0.95);
+  border-radius: 1px;
+  animation: fmwCursorBlink 1.05s steps(2, end) infinite;
+  pointer-events: none;
+}
+@keyframes fmwCursorBlink {
+  0%, 50% { opacity: 1; }
+  50.01%, 100% { opacity: 0.1; }
+}
+@keyframes fmwLampFlicker {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.92; transform: scale(0.98); }
+}
+/* ★ v4.1.33: 移除 v4.1.32 的 body::after 光标（装饰已迁入 wallpaper 内） */
+/* ★ v12.3: 修复！原 z-index:100!important 把 #rightPanel 从 900 降到 100，
+   导致右栏/服务栏被壁纸覆盖。改为保留原始 z-index，仅用 isolation:isolate 防护 WebGL 穿透 */
+:root[data-festival="focus_moment"] .service-mode-switcher,
+:root[data-festival="focus_moment"] .robot-box {
+  position: fixed !important;
+  isolation: isolate;
+}
+:root[data-festival="focus_moment"] #rightPanel {
+  isolation: isolate;
+}
+/* action-buttons 默认 z-index 已是 10001，专注时刻保持更高层级 */
+:root[data-festival="focus_moment"] .action-buttons {
+  position: fixed !important;
+  z-index: 10010 !important;
+  isolation: isolate;
+}
+:root[data-festival="focus_moment"] #starfield {
+  opacity: 0 !important;
+}
+:root[data-festival="focus_moment"] #nebula {
+  opacity: 0 !important;
+}
+
+/* ★ 右侧栏（mimo_panel）模式：body 被 Python 注入 right-panel-mode。
+   这些 fixed 控件原本为全宽主窗口设计（如 right:230px 给右面板让位），
+   在窄右侧栏里会错位/被挤出，需要重新定位。 */
+body.right-panel-mode .service-mode-switcher {
+  right: 8px !important;
+  top: 8px !important;
+  z-index: 110 !important;
+}
+body.right-panel-mode .action-buttons {
+  top: 44px !important;  /* 移到服务切换器下方，避免重叠 */
+  right: 8px !important;
+  z-index: 10010 !important;
+}
+body.right-panel-mode .robot-box {
+  left: 8px !important;
+  bottom: 8px !important;
+  transform: scale(0.85) !important;
+  transform-origin: bottom left;
+  z-index: 110 !important;
+}
+body.right-panel-mode #rightPanel {
+  position: fixed !important;
+  top: 0;
+  right: 0;
+  width: 100% !important;
+  height: 100% !important;
+  z-index: 120 !important;
+}
+/* 右侧栏里让主内容区只占据可用空间，不被 fixed 控件遮挡；
+   并降低遮罩不透明度，避免 WebGL 壁纸被完全盖住。 */
+body.right-panel-mode #content {
+  padding-top: 8px !important;   /* ★ v4.1.27: 84px→8px —— 原来给固定工具栏让位的顶留白过大，压出 LOGO 上方的空带，现收窄让 LOGO 贴顶 */
+  padding-bottom: 60px !important;
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+:root[data-festival="focus_moment"] body.right-panel-mode #content {
+  /* ★ v12.8: 恢复到 0.78 不透明度，与正常/海洋壁纸一致 — 保证对话栏清晰可读 */
+  background: rgba(5, 5, 8, 0.78) !important;
+}
+/* ★ v12.9: 专注时刻下强制 .output-area 最小高度，防止 flex 塌陷导致对话不可见 */
+:root[data-festival="focus_moment"] .output-area {
+  min-height: 300px !important;
+  overflow: hidden;
+}
+:root[data-festival="focus_moment"] .output-messages {
+  min-height: 200px !important;
+}
+
+/* ===== #typewriterfield mask 规则 (L2149-L2165) ===== */
+/* v12.7: 打字机壁纸径向渐变 mask — 更大可见区，包含左侧台灯 */
+#typewriterfield { z-index: 3; }
+:root[data-festival="focus_moment"] #typewriterfield {
+  -webkit-mask-image: radial-gradient(ellipse 78% 60% at 32% 50%,
+    rgba(0,0,0,1) 0%,
+    rgba(0,0,0,0.98) 30%,
+    rgba(0,0,0,0.75) 55%,
+    rgba(0,0,0,0.25) 78%,
+    rgba(0,0,0,0) 100%);
+  mask-image: radial-gradient(ellipse 78% 60% at 32% 50%,
+    rgba(0,0,0,1) 0%,
+    rgba(0,0,0,0.98) 30%,
+    rgba(0,0,0,0.75) 55%,
+    rgba(0,0,0,0.25) 78%,
+    rgba(0,0,0,0) 100%);
+}
+
+/* ========================================================
+ * 第二部分：ThemeManager 中 focus_moment 相关 JS 代码
+ * ======================================================== */
+
+/* --- 主题配置 (L507) --- */
+// themes: {
+//   ...
+//   'focus_moment': { name: '专注时刻', accent: '#ff6900', effect: 'warm', hasWallpaper: true, wallpaperPath: 'data/lemon_wallpaper.png' }
+// }
+
+/* --- renderDecorations SVG 图标 (L662-L666) --- */
+// 'focus_moment': [
+//   '<svg viewBox="0 0 40 40" fill="none"><rect x="8" y="12" width="24" height="18" rx="4" fill="#ff6900" opacity="0.6"/><circle cx="20" cy="18" r="3" fill="#ffd700"/><rect x="12" y="34" width="16" height="3" rx="1.5" fill="#ffaa55"/></svg>',
+//   '<svg viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="8" fill="#ff6900" opacity="0.4"/><circle cx="16" cy="16" r="5" fill="#ffd700"/></svg>',
+//   '<svg viewBox="0 0 20 40" fill="none"><path d="M10 2 Q4 8 4 20 L6 30 L14 30 L16 20 Q16 8 10 2 Z" fill="#ffaa55"/><rect x="7" y="26" width="6" height="10" rx="1" fill="#cc5400"/></svg>'
+// ]
+
+/* --- showBlessing 祝福语 (L684) --- */
+// 'focus_moment': ['⌨️ 专注时刻，让每一个字符都有意义', '🖋️ 沉浸在创造的节奏里，打字即是冥想']
+
+/* --- updateOceanWallpaper (L734-L735) --- */
+// if (themeId === 'focus_moment') {
+//   _wallpaperTheme = 'focus_moment';
+// }
+
+/* --- updateRobot 机器人装饰 SVG (L775) --- */
+// 'focus_moment': '<svg viewBox="0 0 40 32" fill="none"><rect x="6" y="8" width="28" height="18" rx="3" fill="#ff6900" opacity="0.3"/><rect x="10" y="12" width="20" height="10" rx="2" fill="#ffd700"/><circle cx="16" cy="16" r="1.5" fill="#cc5400"/><circle cx="20" cy="16" r="1.5" fill="#cc5400"/><circle cx="24" cy="16" r="1.5" fill="#cc5400"/></svg>'
+
+/* --- showBubble 提示 (L16024-L16025) --- */
+// } else if (_wallpaperTheme === 'focus_moment') {
+//   if (typeof showBubble === 'function') showBubble('⌨️ 专注时刻壁纸~', 2000);
+// }
+
+/* ========================================================
+ * 第三部分：applyWallpaper() 函数中 focus_moment 分支 (L15942-L15981)
+ * ======================================================== */
+
+/*
+// 动态壁纸
+var oceanFrame = document.getElementById('oceanfield');
+if (_wallpaperTheme === 'focus_moment') {
+  // ★ v12.2: 专注时刻 — 恢复 Three.js typewriter iframe
+  if (typeof _starfieldRAF !== 'undefined' && _starfieldRAF) {
+    cancelAnimationFrame(_starfieldRAF); _starfieldRAF = null;
+  }
+  sfCanvas.style.opacity = '0';
+  if (nebulaCanvas) nebulaCanvas.style.opacity = '0';
+  if (oceanFrame) {
+    oceanFrame.style.opacity = '0';
+    setTimeout(function() { oceanFrame.style.display = 'none'; oceanFrame.src = 'about:blank'; }, 600);
+  }
+  var twFrame = document.getElementById('typewriterfield');
+  if (twFrame) {
+    twFrame.style.display = 'block';
+    twFrame.style.opacity = '0';
+    twFrame.style.transition = 'none';
+    twFrame.onload = function() {
+      twFrame.style.transition = 'opacity 1.2s ease';
+      twFrame.style.opacity = '1';
+      // ★ v12.9: iframe 加载完成后强制重排 body/content，防止对话栏塌陷
+      if (typeof fixBodyHeight === 'function') {
+        fixBodyHeight();
+        setTimeout(function() {
+          var c = document.getElementById('content');
+          if (c) {
+            c.style.transition = 'none';
+            var computedH = c.getBoundingClientRect().height || c.offsetHeight;
+            if (computedH > 0 && computedH < 100) {
+              c.style.height = '1px';
+              void c.offsetHeight;
+              c.style.height = '';
+              fixBodyHeight();
+            }
+            c.style.transition = '';
+          }
+        }, 200);
+      }
+    };
+    twFrame.src = 'typewriter_wallpaper.html?v=' + Date.now();
+  }
+}
+*/
+
+/* ========================================================
+ * 第四部分：typewriter_wallpaper.html 完整内容
+ * ======================================================== */
+
+/*
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>THE IMPACT No. 01 — v12.0 机械细节升级</title>
+<style>
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }
+  .stage { position: absolute; inset: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; }
+  .scene-root { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; transform-origin: 0 0; }
+  .scene-root canvas { display: block; width: 1920px; height: 1080px; }
+  .err { position: absolute; top: 12%; left: 50%; transform: translate(-50%, 0); color: #f88; font-family: monospace; font-size: 18px; background: rgba(40,0,0,0.8); padding: 16px 32px; border: 1px solid #800; border-radius: 6px; z-index: 100; }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <div class="scene-root" id="sceneRoot">
+    <canvas id="canvas" width="1920" height="1080"></canvas>
+  </div>
+</div>
+
+<script src="./libs/three/three.min.js"></script>
+<script>
+  var THREE = window.THREE;
+  if (!THREE) {
+    var err = document.createElement('div'); err.className = 'err'; err.textContent = 'Failed to load Three.js';
+    document.body.appendChild(err); throw new Error('THREE not loaded');
+  }
+
+  var W = 1920, H = 1080;
+  var canvas = document.getElementById('canvas');
+  var stage = document.getElementById('stage');
+  var sceneRoot = document.getElementById('sceneRoot');
+
+  try {
+    // ======================================================
+    // 场景 — 透明背景，由 CSS mask 控制可见区域
+    // ======================================================
+    var scene = new THREE.Scene();
+    scene.background = null;
+    scene.fog = new THREE.FogExp2(0x080604, 0.045);
+    var camera = new THREE.PerspectiveCamera(38, W / H, 0.1, 100);
+    camera.position.set(0, 4.8, 8.2);
+    camera.lookAt(-1.0, 0.4, 0);
+
+    var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
+    renderer.setClearColor(0x000000, 0); // ★ 透明背景
+    renderer.setSize(W, H, false);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 2.1;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+// v12.4: contain 模式 — 完整显示打字机，四周留黑（透明）边
+  function fitScene() {
+    var cw = stage.clientWidth, ch = stage.clientHeight;
+    if (cw < 1 || ch < 1) return;
+    var targetAR = cw / ch;
+    if (Math.abs(camera.aspect - targetAR) > 0.01) {
+      camera.aspect = targetAR;
+      camera.updateProjectionMatrix();
+    }
+    // contain 缩放：Math.min 保证完整显示
+    var scale = Math.min(cw / W, ch / H);
+    sceneRoot.style.transform = 'translate(' + ((cw - W * scale) / 2) + 'px, ' + ((ch - H * scale) / 2) + 'px) scale(' + scale + ')';
+  }
+    fitScene();
+    window.addEventListener('resize', fitScene);
+
+    // ======================================================
+    // v12.0 光影 — 由左上方台灯主导，键盘上方补光
+    // ======================================================
+    var mainLight = new THREE.SpotLight(0xffd890, 140);
+    mainLight.position.set(-5.5, 6.0, 3.0);
+    mainLight.target.position.set(-1.2, 0.3, -0.5);
+    mainLight.angle = 0.42;
+    mainLight.penumbra = 0.9;
+    mainLight.decay = 2;
+    mainLight.distance = 22;
+    mainLight.castShadow = true;
+    mainLight.shadow.mapSize.width = 2048;
+    mainLight.shadow.mapSize.height = 2048;
+    scene.add(mainLight);
+    scene.add(mainLight.target);
+
+    var keyLight = new THREE.SpotLight(0xffe8c0, 150);
+    keyLight.position.set(-1.2, 5.5, 3.5);
+    keyLight.target.position.set(-1.2, 0.3, 1.0);
+    keyLight.angle = 0.55;
+    keyLight.penumbra = 0.9;
+    keyLight.decay = 2;
+    keyLight.distance = 16;
+    scene.add(keyLight);
+    scene.add(keyLight.target);
+
+    var frontLight = new THREE.SpotLight(0xffe8c0, 65);
+    frontLight.position.set(-3.5, 3.0, 4.5);
+    frontLight.target.position.set(-1.2, 0.2, 1.0);
+    frontLight.angle = 0.7;
+    frontLight.penumbra = 1;
+    frontLight.decay = 2;
+    scene.add(frontLight);
+    scene.add(frontLight.target);
+
+    var ambientLight = new THREE.AmbientLight(0x201810, 0.3);
+    scene.add(ambientLight);
+
+    var fillLight = new THREE.DirectionalLight(0x3a2a18, 0.15);
+    fillLight.position.set(5, 3, 4);
+    scene.add(fillLight);
+
+    // ======================================================
+    // v12.0 材质
+    // ======================================================
+    var matBody = new THREE.MeshStandardMaterial({ color: 0x181612, roughness: 0.18, metalness: 0.85 });
+    var matFrame = new THREE.MeshStandardMaterial({ color: 0x12100e, roughness: 0.28, metalness: 0.8 });
+    var matKey = new THREE.MeshStandardMaterial({ color: 0x1f1c18, roughness: 0.22, metalness: 0.7 });
+    var matCap = new THREE.MeshStandardMaterial({ color: 0xf6f2e8, roughness: 0.4, metalness: 0.05, emissive: 0x1a1410, emissiveIntensity: 0.04 });
+    var matBrassD = new THREE.MeshStandardMaterial({ color: 0x3a2810, roughness: 0.18, metalness: 0.92 });
+    var matBrassL = new THREE.MeshStandardMaterial({ color: 0x4a3218, roughness: 0.15, metalness: 0.92 });
+    var matPaper = new THREE.MeshStandardMaterial({ color: 0xf6f2e4, roughness: 0.4, metalness: 0, side: THREE.DoubleSide, emissive: 0x2a2014, emissiveIntensity: 0.08 });
+    var matWood = new THREE.MeshStandardMaterial({ color: 0x28180a, roughness: 0.9, metalness: 0 });
+    var matTable = new THREE.MeshStandardMaterial({ color: 0x1a1006, roughness: 0.92, metalness: 0 });
+    var matLamp = new THREE.MeshStandardMaterial({ color: 0x0e0c0a, roughness: 0.5, metalness: 0.5 });
+    var matChrome = new THREE.MeshStandardMaterial({ color: 0x262220, roughness: 0.1, metalness: 0.95 });
+    var matSteel = new THREE.MeshStandardMaterial({ color: 0x1a1816, roughness: 0.3, metalness: 0.85 });
+
+    // ======================================================
+    // v12.0 场景 — 木质桌面 + 打字机（左移） + 台灯
+    // ======================================================
+    var table = new THREE.Mesh(new THREE.BoxGeometry(14, 0.15, 9), matTable);
+    table.position.y = -0.12;
+    table.receiveShadow = true;
+    scene.add(table);
+
+    var tableHL = new THREE.Mesh(new THREE.PlaneGeometry(10, 6),
+      new THREE.MeshStandardMaterial({ color: 0x201208, roughness: 0.85, metalness: 0, transparent: true, opacity: 0.45 }));
+    tableHL.rotation.x = -Math.PI / 2;
+    tableHL.position.set(-0.8, -0.01, 0.3);
+    scene.add(tableHL);
+
+    // === 打字机组 ===
+    var PG = new THREE.Group();
+    PG.rotation.y = -0.52;
+    PG.position.set(-1.2, 0.3, 0);
+    PG.scale.set(0.8, 0.8, 0.8);
+
+    // 木质底座
+    var base = new THREE.Mesh(new THREE.BoxGeometry(5.5, 0.2, 5.0), matWood);
+    base.position.y = 0; base.receiveShadow = true;
+    PG.add(base);
+
+    // 金属机身
+    var body = new THREE.Mesh(new THREE.BoxGeometry(4.5, 0.5, 4.0), matBody);
+    body.position.y = 0.35; body.castShadow = true; body.receiveShadow = true;
+    PG.add(body);
+
+    // 机身底部黄铜装饰条
+    var bt = new THREE.Mesh(new THREE.BoxGeometry(4.6, 0.035, 0.04), matBrassD);
+    bt.position.set(0, 0.05, 2.0);
+    PG.add(bt);
+
+    // 机身前方黄铜装饰条
+    var btF = new THREE.Mesh(new THREE.BoxGeometry(4.6, 0.035, 0.04), matBrassD);
+    btF.position.set(0, 0.05, -2.0);
+    PG.add(btF);
+
+    // 机身侧面装饰条
+    for (var sj = -1; sj <= 1; sj += 2) {
+      var sTrim = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.035, 4.0), matBrassD);
+      sTrim.position.set(sj * 2.25, 0.05, 0);
+      PG.add(sTrim);
+    }
+
+    // 背部挡纸板
+    var bp = new THREE.Mesh(new THREE.BoxGeometry(3.2, 2.6, 0.12), matFrame);
+    bp.position.set(0, 1.75, -1.9); bp.castShadow = true;
+    PG.add(bp);
+
+    // 顶边装饰
+    var tt = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.05, 0.06), matBrassD);
+    tt.position.set(0, 3.02, -1.85);
+    PG.add(tt);
+
+    // 滚筒
+    var pl = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 3.2, 32), matBody);
+    pl.rotation.z = Math.PI / 2;
+    pl.position.set(0, 1.0, -1.6); pl.castShadow = true;
+    PG.add(pl);
+
+    // 滚筒黄铜环
+    var prL = new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.025, 8, 24), matBrassD);
+    prL.position.set(-1.3, 1.0, -1.6); prL.rotation.y = Math.PI / 2;
+    PG.add(prL);
+    var prR = new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.025, 8, 24), matBrassD);
+    prR.position.set(1.3, 1.0, -1.6); prR.rotation.y = Math.PI / 2;
+    PG.add(prR);
+
+    // 压纸杆
+    var tb = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 4.2, 12), matFrame);
+    tb.rotation.z = Math.PI / 2;
+    tb.position.set(0, 2.5, -1.7);
+    PG.add(tb);
+    var tcL = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12), matBrassL);
+    tcL.position.set(-2.1, 2.5, -1.7);
+    PG.add(tcL);
+    var tcR = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12), matBrassL);
+    tcR.position.set(2.1, 2.5, -1.7);
+    PG.add(tcR);
+
+    // 右侧黄铜旋钮（进纸）
+    var ks = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.5, 16), matBrassD);
+    ks.rotation.z = Math.PI / 2;
+    ks.position.set(1.95, 1.25, -1.6);
+    PG.add(ks);
+    var kh = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.08, 24), matBrassL);
+    kh.rotation.z = Math.PI / 2;
+    kh.position.set(2.25, 1.25, -1.6); kh.castShadow = true;
+    PG.add(kh);
+    var kc = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.09, 12), matFrame);
+    kc.rotation.z = Math.PI / 2;
+    kc.position.set(2.31, 1.25, -1.6);
+    PG.add(kc);
+
+    // 左侧大圆盘（带刻度）
+    var disc = new THREE.Mesh(new THREE.CylinderGeometry(0.48, 0.48, 0.06, 32), matFrame);
+    disc.rotation.z = Math.PI / 2;
+    disc.position.set(-1.95, 1.25, -1.9); disc.castShadow = true;
+    PG.add(disc);
+    for (var ti = 0; ti < 10; ti++) {
+      var ta = ti / 10 * Math.PI * 2;
+      var mk = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.045, 0.012), matBrassL);
+      mk.position.set(-1.95 + Math.cos(ta) * 0.36, 1.25 + Math.sin(ta) * 0.36, -1.86);
+      mk.rotation.z = ta;
+      PG.add(mk);
+    }
+    var dc = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12), matBrassL);
+    dc.position.set(-1.95, 1.25, -1.86);
+    PG.add(dc);
+
+    // 色带轴
+    var rL = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.07, 16), matFrame);
+    rL.rotation.z = Math.PI / 2;
+    rL.position.set(-1.0, 1.75, -1.7);
+    PG.add(rL);
+    var rR = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.07, 16), matFrame);
+    rR.rotation.z = Math.PI / 2;
+    rR.position.set(1.0, 1.75, -1.7);
+    PG.add(rR);
+    var rBand = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.05, 0.015),
+      new THREE.MeshStandardMaterial({ color: 0x1a0808, roughness: 0.8, metalness: 0.1 }));
+    rBand.position.set(0, 1.75, -1.7);
+    PG.add(rBand);
+
+    // === 机械结构增强：铅字杆（typebars）扇形排列 ===
+    var typebarGroup = new THREE.Group();
+    typebarGroup.position.set(0, 1.05, -2.0);
+    var barMat = new THREE.MeshStandardMaterial({ color: 0x1a1816, roughness: 0.4, metalness: 0.6 });
+    var headMat = new THREE.MeshStandardMaterial({ color: 0x0e0c0a, roughness: 0.5, metalness: 0.4 });
+    for (var bi = 0; bi < 16; bi++) {
+      var angle = (bi - 7.5) * 0.035;
+      // 铅字杆
+      var bar = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.015, 1.2, 8), barMat);
+      bar.position.set(Math.sin(angle) * 0.6, 0.4, Math.cos(angle) * 0.25);
+      bar.rotation.z = -angle * 0.6;
+      bar.rotation.x = 0.15 + Math.abs(angle) * 0.4;
+      typebarGroup.add(bar);
+      // 铅字头
+      var head = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.08, 0.04), headMat);
+      head.position.set(0, -0.55, 0);
+      bar.add(head);
+    }
+    PG.add(typebarGroup);
+
+    // === 机械结构增强：连杆机构 ===
+    var linkMat = new THREE.MeshStandardMaterial({ color: 0x22201e, roughness: 0.3, metalness: 0.7 });
+    for (var li = 0; li < 8; li++) {
+      var la = (li / 8) * Math.PI;
+      var link = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.4, 6), linkMat);
+      link.position.set(Math.sin(la) * 0.5, 0.55, 0.3 + Math.cos(la) * 0.25);
+      link.rotation.z = 0.2;
+      link.rotation.x = 0.3;
+      PG.add(link);
+    }
+
+    // === 机械结构增强：弹簧（装饰） ===
+    var springMat = new THREE.MeshStandardMaterial({ color: 0x181614, roughness: 0.5, metalness: 0.5 });
+    for (var sp = 0; sp < 4; sp++) {
+      var sa = (sp / 4) * Math.PI * 2;
+      var spring = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.3, 6), springMat);
+      spring.position.set(Math.sin(sa) * 0.4, 0.35, 0.5 + Math.cos(sa) * 0.2);
+      PG.add(spring);
+    }
+
+    // === 5 行键盘 ===
+    var keyLayout = [
+      ['Q','W','E','R','T','Y','U','I','O','P'],
+      ['A','S','D','F','G','H','J','K','L'],
+      ['Z','X','C','V','B','N','M'],
+      ['@','#','$','%','&','*','(',')'],
+      ['1','2','3','4','5','6','7','8','9','0']
+    ];
+    var keyStartX = -1.55, keyStartZ = 1.3;
+    var keyMeshes = [];
+
+    // 键盘底座面板
+    var kbPanel = new THREE.Mesh(new THREE.BoxGeometry(3.8, 0.06, 1.8), matFrame);
+    kbPanel.position.set(-0.05, 0.45, 0.9);
+    PG.add(kbPanel);
+
+    for (var row = 0; row < 5; row++) {
+      var rowChars = keyLayout[row];
+      var xOffset = (row % 2 === 0) ? 0 : 0.17;
+      for (var col = 0; col < rowChars.length; col++) {
+        var char = rowChars[col];
+        var keyX = keyStartX + col * 0.34 + xOffset;
+        var keyZ = keyStartZ - row * 0.32;
+
+        // 键底座
+        var keyBase = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.18, 16), matKey);
+        keyBase.position.set(keyX, 0.52, keyZ);
+        keyBase.castShadow = true;
+        PG.add(keyBase);
+
+        // 键帽
+        var keyCap = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.21, 0.07, 20), new THREE.MeshStandardMaterial({
+          color: 0x1c1a18, roughness: 0.35, metalness: 0.6
+        }));
+        keyCap.position.set(keyX, 0.68, keyZ);
+        keyCap.castShadow = true;
+        keyCap.userData.baseY = keyCap.position.y;
+        keyCap.userData.pressed = 0;
+        PG.add(keyCap);
+        keyMeshes.push(keyCap);
+
+        // 键帽顶面（白色）
+        var capTop = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.012, 20), matCap);
+        capTop.position.set(keyX, 0.722, keyZ);
+        PG.add(capTop);
+
+        // Canvas 字母
+        var lc = document.createElement('canvas');
+        lc.width = 128; lc.height = 128;
+        var ctx = lc.getContext('2d');
+        ctx.fillStyle = '#f6f2e8';
+        ctx.beginPath(); ctx.arc(64, 64, 48, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#1a1610';
+        ctx.font = 'bold 70px "Courier New", monospace';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(char, 64, 68);
+        var tex = new THREE.CanvasTexture(lc);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        var lm = new THREE.Mesh(new THREE.PlaneGeometry(0.26, 0.26),
+          new THREE.MeshBasicMaterial({ map: tex, transparent: true }));
+        lm.rotation.x = -Math.PI / 2;
+        lm.position.set(keyX, 0.735, keyZ);
+        PG.add(lm);
+      }
+    }
+
+    // 前方金属轨道
+    var fb = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 3.8, 12), matBrassD);
+    fb.rotation.x = Math.PI / 2;
+    fb.position.set(0, 0.85, 1.8);
+    PG.add(fb);
+
+    // 抽屉
+    var dr = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.35, 0.07), matFrame);
+    dr.position.set(0, 0.05, 1.95);
+    PG.add(dr);
+    var dk = new THREE.Mesh(new THREE.SphereGeometry(0.06, 12), matBrassL);
+    dk.position.set(0, 0.05, 2.0);
+    PG.add(dk);
+
+    // 黄铜铭牌
+    var pl = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.1, 0.015), matBrassL);
+    pl.position.set(-1.3, 0.4, 2.0);
+    PG.add(pl);
+
+    // 边距铃
+    var bell = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.1, 8), matBrassL);
+    bell.position.set(1.3, 1.6, -1.3);
+    bell.rotation.x = -0.3;
+    PG.add(bell);
+
+    // 平衡轮
+    var wh = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.035, 24), matFrame);
+    wh.rotation.z = Math.PI / 2;
+    wh.position.set(-1.65, 0.6, 1.55);
+    PG.add(wh);
+    for (var wi = 0; wi < 6; wi++) {
+      var wa = wi / 6 * Math.PI * 2;
+      var wm = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.035, 0.01), matBrassL);
+      wm.position.set(-1.65, 0.6 + Math.sin(wa) * 0.28, 1.55 + Math.cos(wa) * 0.02);
+      wm.rotation.x = wa;
+      PG.add(wm);
+    }
+
+    scene.add(PG);
+
+    // === 纸张 ===
+    var paperG = new THREE.Group();
+    paperG.rotation.y = -0.52;
+    paperG.position.set(-1.2, 0.3, 0);
+    paperG.scale.set(0.8, 0.8, 0.8);
+    var pm = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 3.0), matPaper);
+    pm.position.set(0, 2.7, -1.2); pm.rotation.x = -0.2;
+    paperG.add(pm);
+    var pb = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.4), matPaper);
+    pb.position.set(0, 1.2, -1.4); pb.rotation.x = 0.06;
+    paperG.add(pb);
+    scene.add(paperG);
+
+    // === 台灯（左上方） ===
+    var lampG = new THREE.Group();
+    var ls = new THREE.Mesh(new THREE.ConeGeometry(0.75, 0.55, 16), matLamp);
+    ls.position.set(0, 0.25, 0); ls.rotation.x = Math.PI;
+    lampG.add(ls);
+    var li = new THREE.Mesh(new THREE.ConeGeometry(0.7, 0.5, 16, 1, true),
+      new THREE.MeshStandardMaterial({ color: 0xffd890, roughness: 0.25, metalness: 0.3, side: THREE.DoubleSide }));
+    li.position.set(0, 0.23, 0); li.rotation.x = Math.PI;
+    lampG.add(li);
+    var lp = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 1.8, 8), matChrome);
+    lp.position.set(0, -0.65, 0);
+    lampG.add(lp);
+    var lb = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.04, 16), matFrame);
+    lb.position.set(0, -1.55, 0);
+    lampG.add(lb);
+    var bulb = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12),
+      new THREE.MeshBasicMaterial({ color: 0xfff4d8 }));
+    bulb.position.set(0, 0.45, 0);
+    lampG.add(bulb);
+    var bl = new THREE.PointLight(0xffe8b0, 14, 5, 2);
+    bl.position.set(0, 0.45, 0);
+    lampG.add(bl);
+    lampG.position.set(-3.2, 0.9, -0.5);
+    lampG.scale.set(0.85, 0.85, 0.85);
+    lampG.rotation.z = 0.3;
+    scene.add(lampG);
+
+    // === 灰尘粒子 ===
+    var pc = 40;
+    var pg = new THREE.BufferGeometry();
+    var pos = new Float32Array(pc * 3);
+    for (var i = 0; i < pc; i++) {
+      pos[i*3] = (Math.random() - 0.5) * 10 - 1.2;
+      pos[i*3+1] = Math.random() * 4 + 0.1;
+      pos[i*3+2] = (Math.random() - 0.5) * 8;
+    }
+    pg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    var pt = new THREE.PointsMaterial({ color: 0xffd898, size: 0.025, transparent: true, opacity: 0.15, sizeAttenuation: true });
+    var particles = new THREE.Points(pg, pt);
+    scene.add(particles);
+
+    // ======================================================
+    // 动态击键
+    // ======================================================
+    var typeTimer = 0, nextTypeAt = 0.8;
+    function autoTypeKey(dt) {
+      typeTimer += dt;
+      if (typeTimer < nextTypeAt) return;
+      typeTimer = 0;
+      nextTypeAt = 0.12 + Math.random() * 0.25;
+      var idx = Math.floor(Math.random() * keyMeshes.length);
+      keyMeshes[idx].userData.pressed = 1;
+    }
+    function updateKeyAnimation(dt) {
+      for (var i = 0; i < keyMeshes.length; i++) {
+        var cap = keyMeshes[i];
+        if (cap.userData.pressed > 0) {
+          cap.position.y = cap.userData.baseY - 0.045 * cap.userData.pressed;
+          cap.userData.pressed -= dt * 4;
+          if (cap.userData.pressed < 0) {
+            cap.userData.pressed = 0;
+            cap.position.y = cap.userData.baseY;
+          }
+        }
+      }
+    }
+
+    // ======================================================
+    // 渲染循环
+    // ======================================================
+    var clock = new THREE.Clock();
+    function animate() {
+      requestAnimationFrame(animate);
+      var dt = clock.getDelta();
+      autoTypeKey(dt);
+      updateKeyAnimation(dt);
+      particles.rotation.y += dt * 0.015;
+      renderer.render(scene, camera);
+    }
+    animate();
+  } catch (e) {
+    var err = document.createElement('div');
+    err.className = 'err';
+    err.textContent = '3D 场景错误: ' + e.message;
+    document.body.appendChild(err);
+    console.error('3D scene error:', e);
+  }
+</script>
+</body>
+</html>
+*/

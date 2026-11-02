@@ -1,0 +1,4355 @@
+# -*- coding: utf-8 -*-
+"""
+Engine Manager — 统一AI调用入口
+================================================================
+所有AI调用都通过这个模块，消除7个文件各自调用的问题。
+
+使用方法：
+    from shared.engine_manager import EngineManager
+    
+    engine = EngineManager()
+    response = engine.chat("你的问题")
+    response = engine.chat("你的问题", model="ollama")
+    response = engine.chat("你的问题", engine="mimocode")
+"""
+
+import json
+import os
+import re
+import time
+import threading
+import logging
+import concurrent.futures
+import weakref
+from typing import Optional, List, Dict, Any, Callable
+from dataclasses import dataclass, field
+from enum import Enum
+from pathlib import Path
+from collections import OrderedDict, defaultdict
+
+# PyQt5 信号支持（可选依赖）
+try:
+    from PyQt5.QtCore import QObject, pyqtSignal
+    _QT_AVAILABLE = True
+except ImportError:
+    _QT_AVAILABLE = False
+    # Stub 类，当 PyQt5 不可用时使用
+    class QObject:
+        def __init__(self): pass
+    pyqtSignal = lambda *args: property(lambda self: None)
+
+try:
+    import requests
+except ImportError:
+    requests = None
+
+# ★ P2 引擎无关化：统一适配器基类（提供 chat/generate_with_tools/is_available/
+# cleanup 契约与共享 HTTP 连接池助手；兼容以 shared 包或顶层包两种方式导入）
+try:
+    from engines.base import BaseEngineAdapter
+except ImportError:
+    try:
+        from shared.engines.base import BaseEngineAdapter
+    except ImportError:
+        # 兜底占位：理论上 shared/engines/base.py 必然存在，此处仅防极端环境
+        class BaseEngineAdapter:  # type: ignore
+            name = "abstract_engine"
+
+            def _make_http_session(self, *args, **kwargs):
+                raise NotImplementedError("BaseEngineAdapter 未正确加载")
+
+# Ollama 负载均衡（延迟导入以避免与 core 的循环依赖）
+OllamaLoadBalancer = None  # 延迟到 EngineManager.__init__ 时导入
+
+# ★ 新增：结构化日志
+logger = logging.getLogger(__name__)
+
+
+def _normalize_tool_calls(raw_tool_calls: list) -> list:
+    """v3.82-F5: Normalize tool_calls from both Ollama and OpenAI formats.
+
+    Ollama returns:  {"name": "write_file", "arguments": {...}}
+    OpenAI returns:  {"function": {"name": "write_file", "arguments": {...}}}
+    """
+    result = []
+    for tc in raw_tool_calls:
+        func = tc.get("function", {})
+        if func:
+            name = func.get("name", "")
+            args = func.get("arguments", {})
+        else:
+            name = tc.get("name", "")
+            args = tc.get("arguments", {})
+        if isinstance(args, str):
+            try:
+                args = json.loads(args)
+            except (json.JSONDecodeError, TypeError):
+                args = {}
+        if name:
+            result.append({
+                "id": tc.get("id", ""),
+                "name": name,
+                "arguments": args,
+            })
+    return result
+
+
+# ==================== ★ v3.72: Token 估算与花费计算 ====================
+
+def estimate_tokens(text: str) -> int:
+    """估算文本的 Token 数（无需 tiktoken，近似计算）
+
+    规则：
+    - 中文字符 ≈ 1.5 字/token（即 2 个中文字 ≈ 1.3 token）
+    - 英文/数字 ≈ 4 字符/token
+    - 空格/标点 ≈ 4 字符/token
+    - 混合文本按比例加权
+
+    误差范围：±15%（足够用于显示，不适合精确计费）
+    """
+    if not text:
+        return 0
+    chinese_count = sum(1 for c in text if '\u4e00' <= c <= '\u9fff')
+    non_chinese = len(text) - chinese_count
+    # 中文：约 1.5 字/token → token = chinese_count / 1.5
+    # 非中文：约 4 字符/token → token = non_chinese / 4
+    return int(chinese_count / 1.5 + non_chinese / 4)
+
+
+def estimate_messages_tokens(messages: List[Dict]) -> int:
+    """估算消息列表的总 Token 数（含每条消息的 overhead）
+
+    每条消息约 4 token overhead（role + 结构标记）
+    """
+    total = 0
+    for msg in messages:
+        content = msg.get("content", "")
+        if isinstance(content, str):
+            total += estimate_tokens(content)
+        elif isinstance(content, list):
+            # OpenAI vision 格式（content 是数组）
+            for part in content:
+                if isinstance(part, dict):
+                    total += estimate_tokens(part.get("text", ""))
+                    if part.get("type") == "image_url":
+                        total += 85  # 图片固定 overhead
+        # images 字段（Ollama 格式）
+        if msg.get("images"):
+            total += 85 * len(msg["images"])
+        total += 4  # 消息 overhead
+    return total
+
+
+# ★ v3.72: 引擎价格表（单位：元/千 token）
+ENGINE_PRICING = {
+    "ollama":   {"input": 0.0,  "output": 0.0},   # 本地模型免费
+    "mimocode": {"input": 0.0,  "output": 0.0},   # MIMO Code 免费使用
+    "deepseek": {"input": 0.001, "output": 0.002}, # DeepSeek API（约 0.001元/千输入 token）
+    "llama":    {"input": 0.0,  "output": 0.0},   # 本地 LLaMA 免费
+    "miemie_v1": {"input": 0.0, "output": 0.0},  # ★ MIEMIE.V1 本地 Ollama 别名，免费
+}
+
+
+def estimate_cost(engine: str, input_tokens: int, output_tokens: int) -> float:
+    """估算单次对话花费（单位：元）
+
+    Args:
+        engine: 引擎名
+        input_tokens: 输入 token 数
+        output_tokens: 输出 token 数
+
+    Returns:
+        花费（元），本地引擎返回 0.0
+    """
+    pricing = ENGINE_PRICING.get(engine, ENGINE_PRICING["ollama"])
+    cost = (input_tokens / 1000.0) * pricing["input"] + (output_tokens / 1000.0) * pricing["output"]
+    return round(cost, 6)
+
+
+def format_token_info(input_tokens: int, output_tokens: int, context_tokens: int,
+                      cost: float, elapsed: float) -> str:
+    """格式化 Token 信息为简洁文本"""
+    parts = []
+    parts.append(f"输入 {input_tokens}")
+    parts.append(f"输出 {output_tokens}")
+    parts.append(f"上下文 {context_tokens}")
+    if cost > 0:
+        parts.append(f"花费 ¥{cost:.4f}")
+    parts.append(f"耗时 {elapsed:.1f}s")
+    return " · ".join(parts)
+
+
+# ==================== ★ P0-2: 工具调用超时封装 ====================
+
+def _invoke_tool_with_timeout(router, tool_name: str, tool_args: Dict, timeout_seconds: int):
+    """带超时的工具调用封装（使用 concurrent.futures）。
+
+    如果工具执行超过 timeout_seconds，返回超时错误而非永久阻塞。
+    注意：ThreadPoolExecutor 无法强制终止正在运行的线程，
+    超时后线程仍在后台运行，只是不再等待其结果。
+    """
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(router.invoke, tool_name, tool_args, agent_id="agent_chat")
+            try:
+                return future.result(timeout=timeout_seconds)
+            except concurrent.futures.TimeoutError:
+                logger.warning(f"[Agent] 工具 {tool_name} 执行超时 ({timeout_seconds}s)")
+                from standard_mode.core.skills_registry import SkillResult
+                return SkillResult(
+                    success=False,
+                    error=f"工具 {tool_name} 执行超时 ({timeout_seconds}s)，请检查参数或减少数据量",
+                )
+    except Exception as e:
+        logger.warning(f"[Agent] 工具超时封装异常: {e}")
+        return router.invoke(tool_name, tool_args, agent_id="agent_chat")
+
+
+# ==================== 配置 ====================
+
+class EngineType(Enum):
+    """引擎类型"""
+    OLLAMA = "ollama"
+    MIMOCODE = "mimocode"
+    DEEPSEEK = "deepseek"
+    LMSTUDIO = "lmstudio"
+    MIEMIE_V1 = "miemie_v1"   # ★ lemon 咩咩桌面版专属模型（代码审美/风格评审，Ollama 别名 MIEMIE.V1）
+    OPENAI_COMPAT = "openai_compat"
+
+
+@dataclass
+class EngineConfig:
+    """引擎配置"""
+    engine_type: EngineType
+    host: str = "127.0.0.1"
+    port: int = 11434
+    model: str = ""
+    api_key: str = ""
+    api_base: str = ""
+    timeout: int = 600
+    num_predict: int = 1500
+    
+    @property
+    def base_url(self) -> str:
+        if self.api_base:
+            return self.api_base
+        return f"http://{self.host}:{self.port}"
+
+
+@dataclass
+class ChatMessage:
+    """对话消息"""
+    role: str  # "user", "assistant", "system"
+    content: str
+    timestamp: float = field(default_factory=time.time)
+
+
+@dataclass
+class ChatResponse:
+    """对话响应"""
+    content: str
+    engine: str
+    model: str
+    response_time: float
+    token_count: int = 0
+    from_fallback: bool = False
+
+
+# ==================== 引擎适配器 ====================
+
+class OllamaAdapter(BaseEngineAdapter):
+    """Ollama 引擎适配器"""
+    
+    def __init__(self, config: EngineConfig):
+        self.config = config
+        self.name = "ollama"
+        self._session = None  # ★ 延迟创建 Session（连接池复用）
+    
+    def _get_session(self):
+        """获取或创建 requests Session（连接池复用，减少握手开销）"""
+        if self._session is None:
+            # ★ P2：复用统一基类的共享连接池助手（池参数与历史一致）
+            self._session = self._make_http_session(
+                pool_connections=5, pool_maxsize=10, max_retries=1, scheme="http"
+            )
+        return self._session
+    
+    def chat(self, messages: List[Dict], **kwargs) -> str:
+        """发送对话请求"""
+        if not requests:
+            raise ImportError("requests 未安装")
+        
+        model = kwargs.get("model", self.config.model)
+        num_predict = kwargs.get("num_predict", self.config.num_predict)
+        think = kwargs.get("think", False)  # ★ v3.52: 思考模式
+        
+        payload = {
+            "model": model,
+            "messages": messages,
+            "stream": False,
+            "options": {
+                "num_predict": num_predict,
+                "temperature": kwargs.get("temperature", 0.7),
+            }
+        }
+        
+        # ★ v3.52: 思考模式 — 需要更多 token 生成深度推理
+        if think:
+            payload["options"]["num_predict"] = max(num_predict, 2000)
+        
+        response = self._get_session().post(
+            f"{self.config.base_url}/api/chat",
+            json=payload,
+            timeout=self.config.timeout
+        )
+        response.raise_for_status()
+        
+        data = response.json()
+        content = data.get("message", {}).get("content", "")
+        
+        # ★ v3.52: 提取思考过程 — 如果 content 为空但从 thinking 中可提取回复
+        thinking = data.get("message", {}).get("thinking", "")
+        if thinking and not content:
+            content = self._extract_from_thinking(thinking)
+        
+        return content
+    
+    def _extract_from_thinking(self, thinking: str) -> str:
+        """★ v3.52: 从思考过程中提取实际回复"""
+        paragraphs = thinking.split("\n\n")
+        # 从后往前找非思考内容
+        for p in reversed(paragraphs):
+            p = p.strip()
+            if p and not any(kw in p.lower() for kw in ["thinking", "analyze", "step", "考虑", "分析"]):
+                return p
+        # 如果都是思考内容，返回最后一段
+        return paragraphs[-1] if paragraphs else ""
+    
+    def list_models(self) -> List[str]:
+        """获取可用模型列表"""
+        if not requests:
+            return []
+        
+        try:
+            response = self._get_session().get(f"{self.config.base_url}/api/tags", timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                return [m["name"] for m in data.get("models", [])]
+        except Exception:
+            pass  # 网络或API异常时返回空列表
+        return []
+    
+    def generate_with_tools(self, messages: List[Dict], tools: List[Dict],
+                            **kwargs) -> Dict:
+        """
+        带工具调用的生成（Ollama 0.5+ 原生 tools API）
+
+        ★ v3.64: 支持 stream_callback 实时输出 token
+
+        Returns:
+            Dict with keys:
+                - content: 文本回复
+                - tool_calls: List[Dict] 工具调用列表（空列表表示无调用）
+        """
+        if not requests:
+            raise ImportError("requests 未安装")
+
+        model = kwargs.get("model", self.config.model)
+        stream_callback = kwargs.get("stream_callback", None)
+
+        # 若调用方提供了 stream_callback，则启用流式响应
+        use_stream = stream_callback is not None
+
+        payload = {
+            "model": model,
+            "messages": messages,
+            "stream": use_stream,
+            "tools": tools,
+            "options": {
+                "num_predict": kwargs.get("num_predict", self.config.num_predict),
+                "temperature": kwargs.get("temperature", 0.7),
+            }
+        }
+
+        # 流式分支：逐 token 回调，最后聚合工具调用
+        if use_stream:
+            content_parts: List[str] = []
+            raw_tool_calls: List[Dict] = []
+            try:
+                response = self._get_session().post(
+                    f"{self.config.base_url}/api/chat",
+                    json=payload,
+                    stream=True,
+                    timeout=(10, self.config.timeout)  # (连接, 读取)
+                )
+                response.raise_for_status()
+                for line in response.iter_lines():
+                    if not line:
+                        continue
+                    try:
+                        data = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if data.get("done"):
+                        # 最终行可能携带完整 tool_calls
+                        final_msg = data.get("message", {}) or {}
+                        if final_msg.get("tool_calls"):
+                            raw_tool_calls = final_msg["tool_calls"]
+                        break
+                    msg = data.get("message", {}) or {}
+                    token = msg.get("content", "") or ""
+                    if token:
+                        content_parts.append(token)
+                        try:
+                            stream_callback(token)
+                        except Exception:
+                            pass
+                    if msg.get("tool_calls"):
+                        raw_tool_calls = msg["tool_calls"]
+            except Exception as e:
+                # 流式失败时回退到非流式
+                logger.warning(f"[Ollama] 流式 generate_with_tools 失败，回退非流式: {e}")
+                payload["stream"] = False
+                response = self._get_session().post(
+                    f"{self.config.base_url}/api/chat",
+                    json=payload,
+                    timeout=self.config.timeout
+                )
+                response.raise_for_status()
+                data = response.json()
+                msg = data.get("message", {})
+                content_parts = [msg.get("content", "") or ""]
+                raw_tool_calls = msg.get("tool_calls", []) or []
+
+            content = "".join(content_parts)
+        else:
+            response = self._get_session().post(
+                f"{self.config.base_url}/api/chat",
+                json=payload,
+                timeout=self.config.timeout
+            )
+            response.raise_for_status()
+            data = response.json()
+            msg = data.get("message", {})
+            content = msg.get("content", "") or ""
+            raw_tool_calls = msg.get("tool_calls", []) or []
+
+        tool_calls = _normalize_tool_calls(raw_tool_calls)
+
+        # v3.89: 若模型未输出原生 tool_calls，但 content 是工具调用 JSON
+        # （如 qwen2.5-coder:3b 等不支持原生 tools 的模型），从 content 中解析。
+        if not tool_calls and content:
+            parsed = self._parse_tool_calls_from_text(content)
+            if parsed:
+                tool_calls = parsed
+                content = ""  # 工具调用时 content 置空
+
+        return {"content": content, "tool_calls": tool_calls}
+
+    def _parse_tool_calls_from_text(self, content: str) -> List[Dict]:
+        """v3.89: 从模型输出的 JSON 文本中解析工具调用。
+
+        支持格式：
+        - ```json\n{"name": "...", "arguments": {...}}\n```
+        - {"name": "...", "arguments": {...}}
+        - {"tool_calls": [{"name": "...", "arguments": {...}}, ...]}
+        - 单个 / 数组对象
+        - 多个连续 JSON 对象无分隔符: }{  → 逐个提取
+        """
+        import re as _re
+        if not content:
+            return []
+        text = content.strip()
+        # 尝试提取所有 ```json ... ``` 块，再整体提取
+        json_candidates = _re.findall(r"```(?:json)?\s*\n?(.*?)\n?```", text, _re.DOTALL)
+        json_candidates = [c.strip() for c in json_candidates if c.strip()]
+
+        # v3.82-F5: 若无代码块，尝试提取多个连续 JSON 对象
+        if not json_candidates:
+            # 匹配 {"name":...} 模式的独立 JSON 对象
+            individual_objects = _re.findall(
+                r'\{\s*"name"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:\s*\{[^}]*\}\s*\}',
+                text, _re.DOTALL
+            )
+            if individual_objects:
+                json_candidates = individual_objects
+            else:
+                json_candidates = [text]
+
+        parsed_objects = []
+        for cand in json_candidates:
+            try:
+                obj = json.loads(cand)
+                parsed_objects.append(obj)
+            except json.JSONDecodeError:
+                # 尝试截取第一个 { 到匹配的 }
+                first = cand.find("{")
+                if first < 0:
+                    continue
+                depth = 0
+                last = first
+                for idx in range(first, len(cand)):
+                    if cand[idx] == "{":
+                        depth += 1
+                    elif cand[idx] == "}":
+                        depth -= 1
+                        if depth == 0:
+                            last = idx
+                            break
+                if last > first:
+                    try:
+                        obj = json.loads(cand[first:last + 1])
+                        parsed_objects.append(obj)
+                    except json.JSONDecodeError:
+                        continue
+
+        tool_calls: List[Dict] = []
+        for obj in parsed_objects:
+            if isinstance(obj, dict):
+                if "name" in obj and "arguments" in obj:
+                    # 单个工具调用 {"name":..., "arguments":{...}}
+                    tool_calls.append({
+                        "id": f"call_{len(tool_calls)}",
+                        "name": obj["name"],
+                        "arguments": obj.get("arguments", {}),
+                    })
+                elif "tool_calls" in obj and isinstance(obj["tool_calls"], list):
+                    for tc in obj["tool_calls"]:
+                        if isinstance(tc, dict) and "name" in tc:
+                            tool_calls.append({
+                                "id": tc.get("id", f"call_{len(tool_calls)}"),
+                                "name": tc["name"],
+                                "arguments": tc.get("arguments", {}),
+                            })
+            elif isinstance(obj, list):
+                for tc in obj:
+                    if isinstance(tc, dict) and "name" in tc:
+                        tool_calls.append({
+                            "id": tc.get("id", f"call_{len(tool_calls)}"),
+                            "name": tc["name"],
+                            "arguments": tc.get("arguments", {}),
+                        })
+        return tool_calls
+
+    def is_available(self) -> bool:
+        """检查引擎是否可用"""
+        if not requests:
+            return False
+        try:
+            response = self._get_session().get(f"{self.config.base_url}/api/tags", timeout=3)
+            return response.status_code == 200
+        except Exception:
+            return False  # 网络不可达或超时
+
+    def cleanup(self):
+        """释放连接池资源"""
+        if self._session:
+            self._session.close()
+            self._session = None
+
+
+class MimoCodeAdapter(BaseEngineAdapter):
+    """MIMO Code 引擎适配器"""
+    
+    def __init__(self, config: EngineConfig):
+        self.config = config
+        self.name = "mimocode"
+        self._session = None
+    
+    def _get_session(self):
+        if self._session is None:
+            # ★ P2：复用统一基类的共享连接池助手（池参数与历史一致）
+            self._session = self._make_http_session(
+                pool_connections=3, pool_maxsize=6, max_retries=1, scheme="http"
+            )
+        return self._session
+    
+    def chat(self, messages: List[Dict], **kwargs) -> str:
+        """发送对话请求"""
+        if not requests:
+            raise ImportError("requests 未安装")
+        
+        # MIMO Code 使用 /v1/chat/completions 接口
+        payload = {
+            "model": kwargs.get("model", "mimo"),
+            "messages": messages,
+            "stream": False
+        }
+        
+        response = self._get_session().post(
+            f"{self.config.base_url}/v1/chat/completions",
+            json=payload,
+            timeout=self.config.timeout
+        )
+        response.raise_for_status()
+        
+        data = response.json()
+        choices = data.get("choices", [])
+        if choices:
+            return choices[0].get("message", {}).get("content", "")
+        return ""
+    
+    def list_models(self) -> List[str]:
+        """获取可用模型列表"""
+        return ["mimo"]  # MIMO Code 默认模型
+
+    def generate_with_tools(self, messages: List[Dict], tools: List[Dict],
+                              model: str = "", stream_callback=None) -> Dict[str, Any]:
+        """
+        ★ v3.67: MimoCodeAdapter 工具调用实现
+        ========================================
+        MIMO Code 不原生支持 function calling，
+        通过 prompt 工程模拟 function calling：
+
+        1. 把 tools 定义注入到 system prompt 中
+        2. 指示模型用 JSON 格式输出工具调用
+        3. 解析模型响应，提取 tool_calls
+
+        Args:
+            messages: 消息列表（含 system / user / assistant / tool）
+            tools: 工具定义列表（OpenAI function calling 格式）
+            model: 模型名（可选）
+            stream_callback: 流式回调（可选）
+
+        Returns:
+            Dict: {"content": str, "tool_calls": List[Dict], "model": str}
+        """
+        if not requests:
+            return {
+                "content": "requests 库未安装，无法调用 MIMO Code",
+                "tool_calls": [],
+                "model": model or "mimo",
+            }
+
+        # 1. 构造工具说明文本
+        tools_desc_lines = ["", "## 可用工具列表", ""]
+        for t in tools:
+            func = t.get("function", t) if isinstance(t, dict) else {}
+            name = func.get("name", "")
+            desc = func.get("description", "")
+            params = func.get("parameters", {})
+            props = params.get("properties", {})
+            required = params.get("required", [])
+
+            params_desc = []
+            for pname, pinfo in props.items():
+                if isinstance(pinfo, dict):
+                    ptype = pinfo.get("type", "string")
+                    pdesc = pinfo.get("description", "")
+                    req_mark = "必填" if pname in required else "可选"
+                    params_desc.append(f"    - {pname} ({ptype}, {req_mark}): {pdesc}")
+            params_str = "\n".join(params_desc) if params_desc else "    (无参数)"
+
+            tools_desc_lines.append(f"### {name}")
+            tools_desc_lines.append(f"描述: {desc}")
+            tools_desc_lines.append(f"参数:")
+            tools_desc_lines.append(params_str)
+            tools_desc_lines.append("")
+
+        tools_desc = "\n".join(tools_desc_lines)
+
+        # 2. 工具调用规则
+        tool_rules = """
+## 工具调用规则
+
+当需要调用工具时，**必须**用以下 JSON 格式输出（只能输出一个 JSON 块，不要其他文字）：
+
+```json
+{
+  "tool_calls": [
+    {
+      "name": "工具名",
+      "arguments": {"参数名": "参数值"}
+    }
+  ]
+}
+```
+
+注意：
+- 如果不需要调用工具，直接输出自然语言回复（不要输出 JSON）
+- 一次可以调用多个工具（在 tool_calls 数组中）
+- arguments 中的参数名必须与工具定义一致
+- 参数值类型必须与工具定义一致（字符串/数字/布尔/数组/对象）
+- 接收到工具结果后，请用自然语言总结要点，不要原样复制
+
+## 工具调用示例
+
+用户：执行 print(1+1)
+助手：
+```json
+{
+  "tool_calls": [
+    {
+      "name": "execute_code",
+      "arguments": {"code": "print(1+1)", "language": "python"}
+    }
+  ]
+}
+```
+"""
+
+        # 3. 注入到 system 消息
+        injected_messages = []
+        for msg in messages:
+            if msg.get("role") == "system":
+                injected_messages.append({
+                    "role": "system",
+                    "content": msg["content"] + "\n\n" + tools_desc + tool_rules,
+                })
+            else:
+                injected_messages.append(msg)
+
+        if not any(m.get("role") == "system" for m in injected_messages):
+            injected_messages.insert(0, {
+                "role": "system",
+                "content": "你是 Lemon Code Agent。" + tools_desc + tool_rules,
+            })
+
+        # 4. 调用 MIMO Code API
+        try:
+            payload = {
+                "model": model or "mimo",
+                "messages": injected_messages,
+                "stream": False,
+                "temperature": 0.1,  # 工具调用用低温度
+            }
+            response = self._get_session().post(
+                f"{self.config.base_url}/v1/chat/completions",
+                json=payload,
+                timeout=self.config.timeout,
+            )
+            response.raise_for_status()
+
+            data = response.json()
+            choices = data.get("choices", [])
+            content = ""
+            if choices:
+                content = choices[0].get("message", {}).get("content", "")
+
+            # 5. 解析工具调用 JSON
+            tool_calls = self._parse_tool_calls_from_content(content)
+
+            if tool_calls:
+                # 有工具调用 — 流式输出工具调用 JSON（如果需要）
+                if stream_callback:
+                    stream_callback(content)
+                return {
+                    "content": "",  # 工具调用时不返回 content
+                    "tool_calls": tool_calls,
+                    "model": model or "mimo",
+                }
+
+            # 无工具调用 — 流式输出最终回复
+            if stream_callback:
+                stream_callback(content)
+            return {
+                "content": content,
+                "tool_calls": [],
+                "model": model or "mimo",
+            }
+        except Exception as e:
+            logger.error(f"[MimoCode] generate_with_tools 异常: {e}")
+            return {
+                "content": f"MIMO Code 工具调用失败: {e}",
+                "tool_calls": [],
+                "model": model or "mimo",
+            }
+
+    def _parse_tool_calls_from_content(self, content: str) -> List[Dict]:
+        """
+        ★ v3.67: 从模型输出中解析工具调用 JSON
+
+        支持格式：
+        - ```json\n{"tool_calls": [...]}\n```
+        - {"tool_calls": [...]}
+        - 带前后说明文字的 JSON 块
+        """
+        if not content or "tool_calls" not in content:
+            return []
+
+        import re
+        import json as _json
+
+        # 尝试从 ```json ... ``` 块中提取
+        json_blocks = re.findall(r"```(?:json)?\s*\n?(.*?)\n?```", content, re.DOTALL)
+        for block in json_blocks:
+            try:
+                parsed = _json.loads(block.strip())
+                if isinstance(parsed, dict) and "tool_calls" in parsed:
+                    tcs = parsed["tool_calls"]
+                    if isinstance(tcs, list):
+                        # 标准化格式
+                        normalized = []
+                        for i, tc in enumerate(tcs):
+                            if isinstance(tc, dict) and "name" in tc:
+                                normalized.append({
+                                    "id": tc.get("id", f"call_{i}"),
+                                    "name": tc["name"],
+                                    "arguments": tc.get("arguments", {}),
+                                })
+                        return normalized
+            except _json.JSONDecodeError:
+                continue
+
+        # 尝试直接解析整个内容
+        try:
+            # 找到第一个 { 和最后一个 }
+            first = content.find("{")
+            last = content.rfind("}")
+            if first >= 0 and last > first:
+                json_str = content[first:last + 1]
+                parsed = _json.loads(json_str)
+                if isinstance(parsed, dict) and "tool_calls" in parsed:
+                    tcs = parsed["tool_calls"]
+                    if isinstance(tcs, list):
+                        normalized = []
+                        for i, tc in enumerate(tcs):
+                            if isinstance(tc, dict) and "name" in tc:
+                                normalized.append({
+                                    "id": tc.get("id", f"call_{i}"),
+                                    "name": tc["name"],
+                                    "arguments": tc.get("arguments", {}),
+                                })
+                        return normalized
+        except _json.JSONDecodeError:
+            pass
+
+        return []
+
+    def is_available(self) -> bool:
+        """检查引擎是否可用
+        
+        ★ v3.60: 优先检查 mimo.exe 文件是否存在（serve_bridge 会启动它）
+        而不是检查 HTTP 端口（此时可能还未启动）
+        """
+        # 优先使用本地 bin/mimo.exe（lemon_agent 自带）
+        _script_dir = os.path.dirname(os.path.abspath(__file__))  # shared/
+        mimo_exe = os.path.join(_script_dir, "..", "bin", "mimo.exe")
+        mimo_exe = os.path.abspath(mimo_exe)
+        if os.path.exists(mimo_exe):
+            return True
+        if not requests:
+            return False
+        try:
+            response = self._get_session().get(f"{self.config.base_url}/health", timeout=3)
+            return response.status_code == 200
+        except Exception:
+            return False  # 健康检查失败（网络不可达或服务未启动）
+    
+    def cleanup(self):
+        if self._session:
+            self._session.close()
+            self._session = None
+
+
+# ============================================================
+# ★ lemon 咩咩桌面版专属模型适配器 — MIEMIE.V1
+#   指向本机 Ollama 别名 MIEMIE.V1（4GB 代码审美/风格评审）
+#   与 HUAWEI.MIEMIE（情感陪伴）严格隔离，绝不混用权重/语料
+# ============================================================
+
+# ★ MIEMIE.V1「代码审美官」系统提示词（仅注入代码评审类意图）
+MIEMIE_V1_CODER_SYSTEM_PROMPT = (
+    "你是 Lemon 咩咩桌面版的「代码审美官」（MIEMIE.V1）。"
+    "你专注于代码风格审查与质量评审，风格理性、严谨、可执行。"
+    "面对用户提交的代码，请从以下 5 个维度给出评分（1-10 分）"
+    "并附上具体、可操作的改进建议：\n"
+    "1. 可读性（命名/注释/结构）\n"
+    "2. 简洁性（冗余/复杂度）\n"
+    "3. 一致性（风格/约定）\n"
+    "4. 健壮性（边界/异常）\n"
+    "5. 可维护性（模块化/可扩展）\n"
+    "输出格式：先给 5 维评分表，再给改进建议列表。"
+)
+
+
+class MiemieV1Adapter(BaseEngineAdapter):
+    """★ MIEMIE.V1 引擎适配器 — Ollama 别名 MIEMIE.V1（代码审美/风格评审）"""
+
+    name = "miemie_v1"
+    config = EngineConfig(
+        engine_type=EngineType.MIEMIE_V1,
+        host="127.0.0.1",
+        port=11434,
+        model="MIEMIE.V1",
+        timeout=180,
+        num_predict=2000,
+    )
+
+    _session: Any = None
+
+    def _get_session(self):
+        if self._session is None:
+            if not requests:
+                raise ImportError("requests 未安装")
+            self._session = requests.Session()
+        return self._session
+
+    def chat(self, messages: List[Dict], **kwargs) -> str:
+        """发送对话请求（MIEMIE.V1 代码审美官）"""
+        if not requests:
+            raise ImportError("requests 未安装")
+
+        model = kwargs.get("model", self.config.model)
+        num_predict = kwargs.get("num_predict", self.config.num_predict)
+        temperature = kwargs.get("temperature", 0.5)  # 评审偏理性、低随机
+
+        # ★ 若用户消息没有 system 角色，则注入代码审美官人设
+        has_system = any(m.get("role") == "system" for m in messages)
+        _messages = list(messages)
+        if not has_system:
+            _messages.insert(0, {"role": "system", "content": MIEMIE_V1_CODER_SYSTEM_PROMPT})
+
+        payload = {
+            "model": model,
+            "messages": _messages,
+            "stream": False,
+            "options": {
+                "num_predict": num_predict,
+                "temperature": temperature,
+            }
+        }
+
+        response = self._get_session().post(
+            f"{self.config.base_url}/api/chat",
+            json=payload,
+            timeout=self.config.timeout
+        )
+        response.raise_for_status()
+
+        data = response.json()
+        content = data.get("message", {}).get("content", "")
+        return content
+
+    def generate_with_tools(self, messages: List[Dict], tools: List[Dict],
+                            **kwargs) -> Dict:
+        """带工具调用的生成 — MIEMIE.V1 主要做评审，工具调用能力从简（复用 Ollama 原生 tools）"""
+        if not requests:
+            raise ImportError("requests 未安装")
+
+        model = kwargs.get("model", self.config.model)
+        payload = {
+            "model": model,
+            "messages": messages,
+            "stream": False,
+            "tools": tools,
+            "options": {
+                "num_predict": kwargs.get("num_predict", self.config.num_predict),
+                "temperature": kwargs.get("temperature", 0.5),
+            }
+        }
+        response = self._get_session().post(
+            f"{self.config.base_url}/api/chat",
+            json=payload,
+            timeout=self.config.timeout
+        )
+        response.raise_for_status()
+        data = response.json()
+        msg = data.get("message", {})
+        content = msg.get("content", "") or ""
+        raw_tool_calls = msg.get("tool_calls", []) or []
+        tool_calls = _normalize_tool_calls(raw_tool_calls)
+        return {"content": content, "tool_calls": tool_calls}
+
+    def is_available(self) -> bool:
+        """检查 MIEMIE.V1 Ollama 别名是否可用"""
+        if not requests:
+            return False
+        try:
+            response = self._get_session().get(f"{self.config.base_url}/api/tags", timeout=3)
+            if response.status_code == 200:
+                models = [m["name"] for m in response.json().get("models", [])]
+                return "MIEMIE.V1" in models
+        except Exception:
+            pass
+        return False
+
+    def cleanup(self):
+        if self._session:
+            self._session.close()
+            self._session = None
+
+
+class DeepSeekAdapter(BaseEngineAdapter):
+    """DeepSeek API 适配器"""
+
+    def __init__(self, config: EngineConfig):
+        self.config = config
+        self.name = "deepseek"
+        self._session = None
+
+    def _get_session(self):
+        if self._session is None:
+            # ★ P2：复用统一基类的共享连接池助手（https，池参数与历史一致）
+            self._session = self._make_http_session(
+                pool_connections=3, pool_maxsize=6, max_retries=1, scheme="https"
+            )
+        return self._session
+
+    def chat(self, messages: List[Dict], **kwargs) -> str:
+        """发送对话请求"""
+        if not requests:
+            raise ImportError("requests 未安装")
+
+        headers = {
+            "Authorization": f"Bearer {self.config.api_key}",
+            "Content-Type": "application/json"
+        }
+
+        payload = {
+            "model": kwargs.get("model", self.config.model or "deepseek-chat"),
+            "messages": messages,
+            "stream": False
+        }
+
+        api_base = getattr(self.config, 'api_base', '') or 'https://api.deepseek.com/v1'
+        url = api_base.rstrip('/') + '/chat/completions'
+        logger.info(f"[DeepSeek] chat() → {url} model={payload.get('model','?')} timeout={self.config.timeout}s")
+        response = self._get_session().post(
+            url,
+            json=payload,
+            headers=headers,
+            timeout=self.config.timeout
+        )
+        logger.info(f"[DeepSeek] chat() ← status={response.status_code}")
+        response.raise_for_status()
+
+        data = response.json()
+        choices = data.get("choices", [])
+        if choices:
+            return choices[0].get("message", {}).get("content", "")
+        return ""
+
+    def generate_with_tools(self, messages: List[Dict], tools: List[Dict],
+                            **kwargs) -> Dict:
+        """
+        带工具调用的生成（DeepSeek 原生支持 OpenAI function calling）
+
+        ★ v3.64: 支持 stream_callback 实时输出 token
+
+        Returns:
+            Dict with keys:
+                - content: 文本回复
+                - tool_calls: List[Dict] 工具调用列表（空列表表示无调用）
+        """
+        if not requests:
+            raise ImportError("requests 未安装")
+
+        headers = {
+            "Authorization": f"Bearer {self.config.api_key}",
+            "Content-Type": "application/json"
+        }
+
+        model = kwargs.get("model", self.config.model or "deepseek-chat")
+        stream_callback = kwargs.get("stream_callback", None)
+        use_stream = stream_callback is not None
+
+        api_base = getattr(self.config, 'api_base', '') or 'https://api.deepseek.com/v1'
+        url = api_base.rstrip('/') + '/chat/completions'
+
+        payload = {
+            "model": model,
+            "messages": messages,
+            "tools": tools,
+            "stream": use_stream,
+            "temperature": kwargs.get("temperature", 0.7),
+            "max_tokens": kwargs.get("max_tokens", 2000),
+        }
+
+        if use_stream:
+            content_parts: List[str] = []
+            tc_accum: Dict[int, Dict[str, Any]] = {}
+            try:
+                response = self._get_session().post(
+                    url,
+                    json=payload,
+                    headers=headers,
+                    stream=True,
+                    timeout=(10, self.config.timeout),
+                )
+                response.raise_for_status()
+                for raw_line in response.iter_lines():
+                    if not raw_line:
+                        continue
+                    # SSE 格式：data: {...}
+                    if isinstance(raw_line, bytes):
+                        line_str = raw_line.decode("utf-8", errors="replace")
+                    else:
+                        line_str = raw_line
+                    if not line_str.startswith("data:"):
+                        continue
+                    data_str = line_str[5:].strip()
+                    if data_str == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data_str)
+                    except json.JSONDecodeError:
+                        continue
+                    choices = chunk.get("choices", []) or []
+                    if not choices:
+                        continue
+                    delta = choices[0].get("delta", {}) or {}
+                    # 内容 token
+                    token = delta.get("content", "") or ""
+                    if token:
+                        content_parts.append(token)
+                        try:
+                            stream_callback(token)
+                        except Exception:
+                            pass
+                    # 工具调用分块累积
+                    delta_tcs = delta.get("tool_calls", []) or []
+                    for dtc in delta_tcs:
+                        idx = dtc.get("index", 0)
+                        slot = tc_accum.setdefault(idx, {"id": "", "name": "", "args_str": ""})
+                        if dtc.get("id"):
+                            slot["id"] = dtc["id"]
+                        func = dtc.get("function", {}) or {}
+                        if func.get("name"):
+                            slot["name"] = func["name"]
+                        if func.get("arguments"):
+                            slot["args_str"] += func["arguments"]
+            except Exception as e:
+                logger.warning(f"[DeepSeek] 流式 generate_with_tools 失败，回退非流式: {e}")
+                payload["stream"] = False
+                response = self._get_session().post(
+                    url,
+                    json=payload,
+                    headers=headers,
+                    timeout=self.config.timeout,
+                )
+                response.raise_for_status()
+                data = response.json()
+                choices = data.get("choices", [])
+                if choices:
+                    msg = choices[0].get("message", {})
+                    content_parts = [msg.get("content", "") or ""]
+                    tc_accum = {}
+                    for i, tc in enumerate(msg.get("tool_calls", []) or []):
+                        func = tc.get("function", {})
+                        tc_accum[i] = {
+                            "id": tc.get("id", ""),
+                            "name": func.get("name", ""),
+                            "args_str": func.get("arguments", "{}") or "{}",
+                        }
+                else:
+                    content_parts = [""]
+                    tc_accum = {}
+
+            content = "".join(content_parts)
+            # 构造 raw_tool_calls 列表（按 index 排序）
+            raw_tool_calls = []
+            for idx in sorted(tc_accum.keys()):
+                slot = tc_accum[idx]
+                raw_tool_calls.append({
+                    "id": slot["id"],
+                    "function": {
+                        "name": slot["name"],
+                        "arguments": slot["args_str"],
+                    },
+                })
+        else:
+            logger.info(f"[DeepSeek] generate_with_tools(non-stream) → {url} model={payload.get('model','?')}")
+            response = self._get_session().post(
+                url,
+                json=payload,
+                headers=headers,
+                timeout=self.config.timeout
+            )
+            logger.info(f"[DeepSeek] generate_with_tools ← status={response.status_code}")
+            response.raise_for_status()
+
+            data = response.json()
+            choices = data.get("choices", [])
+            if not choices:
+                return {"content": "", "tool_calls": []}
+
+            msg = choices[0].get("message", {})
+            content = msg.get("content", "") or ""
+            raw_tool_calls = msg.get("tool_calls", []) or []
+
+        # 规范化 tool_calls 格式
+        tool_calls = _normalize_tool_calls(raw_tool_calls)
+
+        return {"content": content, "tool_calls": tool_calls}
+
+    def list_models(self) -> List[str]:
+        return ["deepseek-v4-flash(测试)", "deepseek-v4-pro(测试)"]
+
+    def is_available(self) -> bool:
+        """检查引擎是否可用"""
+        return bool(self.config.api_key)
+
+    def cleanup(self):
+        if self._session:
+            self._session.close()
+            self._session = None
+
+
+class OpenAICompatAdapter(BaseEngineAdapter):
+    """OpenAI 兼容 API 适配器 — 支持任意 OpenAI 格式的云端/本地模型服务
+
+    支持的服务商:
+    - DeepSeek (api.deepseek.com)
+    - Moonshot / Kimi (api.moonshot.cn)
+    - Zhipu / GLM (open.bigmodel.cn)
+    - Qwen / DashScope (dashscope.aliyuncs.com)
+    - SiliconFlow (api.siliconflow.cn)
+    - Groq (api.groq.com)
+    - OpenRouter (openrouter.ai)
+    - LM Studio / Ollama 本地 (localhost)
+    - 任何 OpenAI 兼容端点
+    """
+
+    PRESET_PROVIDERS = {
+        "deepseek": {
+            "name": "DeepSeek",
+            "api_base": "https://api.deepseek.com/v1",
+            "models": ["deepseek-chat", "deepseek-coder", "deepseek-r1"],
+            "default_model": "deepseek-chat",
+        },
+        "moonshot": {
+            "name": "Moonshot / Kimi",
+            "api_base": "https://api.moonshot.cn/v1",
+            "models": ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"],
+            "default_model": "moonshot-v1-8k",
+        },
+        "zhipu": {
+            "name": "Zhipu / ChatGLM",
+            "api_base": "https://open.bigmodel.cn/api/paas/v4",
+            "models": ["glm-4", "glm-4-flash", "glm-4-plus", "glm-4-long"],
+            "default_model": "glm-4-flash",
+        },
+        "qwen": {
+            "name": "Qwen / DashScope",
+            "api_base": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            "models": ["qwen-turbo", "qwen-plus", "qwen-max", "qwen-long"],
+            "default_model": "qwen-plus",
+        },
+        "siliconflow": {
+            "name": "SiliconFlow",
+            "api_base": "https://api.siliconflow.cn/v1",
+            "models": ["Qwen/Qwen2.5-7B-Instruct", "deepseek-ai/DeepSeek-V2.5"],
+            "default_model": "Qwen/Qwen2.5-7B-Instruct",
+        },
+        "groq": {
+            "name": "Groq",
+            "api_base": "https://api.groq.com/openai/v1",
+            "models": ["llama-3.1-8b-instant", "llama-3.1-70b-versatile", "mixtral-8x7b-32768"],
+            "default_model": "llama-3.1-8b-instant",
+        },
+        "openrouter": {
+            "name": "OpenRouter",
+            "api_base": "https://openrouter.ai/api/v1",
+            "models": ["openai/gpt-4o-mini", "anthropic/claude-3-haiku", "google/gemini-2.0-flash-exp"],
+            "default_model": "openai/gpt-4o-mini",
+        },
+        "lmstudio": {
+            "name": "LM Studio (Local)",
+            "api_base": "http://localhost:1234/v1",
+            "models": [],
+            "default_model": "",
+        },
+        "custom": {
+            "name": "Custom OpenAI Compatible",
+            "api_base": "",
+            "models": [],
+            "default_model": "",
+        },
+    }
+
+    def __init__(self, config: EngineConfig, provider_id: str = "custom",
+                 display_name: str = "", models: Optional[List[str]] = None):
+        self.config = config
+        self.name = config.api_base or provider_id
+        self._provider_id = provider_id
+        self._display_name = display_name or self.PRESET_PROVIDERS.get(provider_id, {}).get("name", provider_id)
+        self._models = models or self.PRESET_PROVIDERS.get(provider_id, {}).get("models", [])
+        self._session = None
+
+    def _get_session(self):
+        if self._session is None:
+            scheme = "https" if self.config.api_base.startswith("https") else "http"
+            self._session = self._make_http_session(
+                pool_connections=3, pool_maxsize=6, max_retries=1, scheme=scheme
+            )
+        return self._session
+
+    def _headers(self) -> Dict:
+        h = {"Content-Type": "application/json"}
+        if self.config.api_key:
+            h["Authorization"] = f"Bearer {self.config.api_key}"
+        return h
+
+    def _api_url(self) -> str:
+        base = self.config.api_base.rstrip("/")
+        return f"{base}/chat/completions"
+
+    def chat(self, messages: List[Dict], **kwargs) -> str:
+        if not requests:
+            raise ImportError("requests not installed")
+        payload = {
+            "model": kwargs.get("model", self.config.model),
+            "messages": messages,
+            "stream": False,
+            "temperature": kwargs.get("temperature", 0.7),
+            "max_tokens": kwargs.get("max_tokens", 2000),
+        }
+        resp = self._get_session().post(
+            self._api_url(), json=payload, headers=self._headers(),
+            timeout=self.config.timeout,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        choices = data.get("choices", [])
+        if choices:
+            return choices[0].get("message", {}).get("content", "")
+        return ""
+
+    def generate_with_tools(self, messages: List[Dict], tools: List[Dict], **kwargs) -> Dict:
+        if not requests:
+            raise ImportError("requests not installed")
+        model = kwargs.get("model", self.config.model)
+        stream_callback = kwargs.get("stream_callback", None)
+        use_stream = stream_callback is not None
+        payload = {
+            "model": model,
+            "messages": messages,
+            "tools": tools,
+            "stream": use_stream,
+            "temperature": kwargs.get("temperature", 0.7),
+            "max_tokens": kwargs.get("max_tokens", 2000),
+        }
+        content_parts: List[str] = []
+        tc_accum: Dict[int, Dict[str, Any]] = {}
+        try:
+            if use_stream:
+                resp = self._get_session().post(
+                    self._api_url(), json=payload, headers=self._headers(),
+                    stream=True, timeout=(10, self.config.timeout),
+                )
+                resp.raise_for_status()
+                for raw_line in resp.iter_lines():
+                    if not raw_line:
+                        continue
+                    line_str = raw_line.decode("utf-8", errors="replace") if isinstance(raw_line, bytes) else raw_line
+                    if not line_str.startswith("data:"):
+                        continue
+                    data_str = line_str[5:].strip()
+                    if data_str == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data_str)
+                    except json.JSONDecodeError:
+                        continue
+                    choices = chunk.get("choices", []) or []
+                    if not choices:
+                        continue
+                    delta = choices[0].get("delta", {}) or {}
+                    token = delta.get("content", "") or ""
+                    if token:
+                        content_parts.append(token)
+                        try:
+                            stream_callback(token)
+                        except Exception:
+                            pass
+                    delta_tcs = delta.get("tool_calls", []) or []
+                    for dtc in delta_tcs:
+                        idx = dtc.get("index", 0)
+                        slot = tc_accum.setdefault(idx, {"id": "", "name": "", "args_str": ""})
+                        if dtc.get("id"):
+                            slot["id"] = dtc["id"]
+                        func = dtc.get("function", {}) or {}
+                        if func.get("name"):
+                            slot["name"] = func["name"]
+                        if func.get("arguments"):
+                            slot["args_str"] += func["arguments"]
+            else:
+                resp = self._get_session().post(
+                    self._api_url(), json=payload, headers=self._headers(),
+                    timeout=self.config.timeout,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                choices = data.get("choices", [])
+                if choices:
+                    msg = choices[0].get("message", {})
+                    content_parts = [msg.get("content", "") or ""]
+                    for i, tc in enumerate(msg.get("tool_calls", []) or []):
+                        func = tc.get("function", {})
+                        tc_accum[i] = {
+                            "id": tc.get("id", ""),
+                            "name": func.get("name", ""),
+                            "args_str": func.get("arguments", "{}") or "{}",
+                        }
+                else:
+                    content_parts = [""]
+        except Exception as e:
+            if use_stream:
+                payload["stream"] = False
+                resp = self._get_session().post(
+                    self._api_url(), json=payload, headers=self._headers(),
+                    timeout=self.config.timeout,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                choices = data.get("choices", [])
+                if choices:
+                    msg = choices[0].get("message", {})
+                    content_parts = [msg.get("content", "") or ""]
+                    tc_accum = {}
+                    for i, tc in enumerate(msg.get("tool_calls", []) or []):
+                        func = tc.get("function", {})
+                        tc_accum[i] = {
+                            "id": tc.get("id", ""),
+                            "name": func.get("name", ""),
+                            "args_str": func.get("arguments", "{}") or "{}",
+                        }
+                else:
+                    content_parts = [""]
+            else:
+                raise
+
+        content = "".join(content_parts)
+        raw_tool_calls = []
+        for idx in sorted(tc_accum.keys()):
+            slot = tc_accum[idx]
+            raw_tool_calls.append({
+                "id": slot["id"],
+                "function": {"name": slot["name"], "arguments": slot["args_str"]},
+            })
+        tool_calls = _normalize_tool_calls(raw_tool_calls)
+        return {"content": content, "tool_calls": tool_calls}
+
+    def list_models(self) -> List[str]:
+        if self._models:
+            return self._models
+        if self.config.api_key:
+            try:
+                base = self.config.api_base.rstrip("/")
+                resp = requests.get(f"{base}/models", headers=self._headers(), timeout=5)
+                if resp.status_code == 200:
+                    data = resp.json().get("data", [])
+                    return [m.get("id", "") for m in data if m.get("id")]
+            except Exception:
+                pass
+        return [self.config.model] if self.config.model else []
+
+    def is_available(self) -> bool:
+        if not self.config.api_base:
+            return False
+        try:
+            base = self.config.api_base.rstrip("/")
+            resp = requests.get(f"{base}/models", headers=self._headers(), timeout=5)
+            return resp.status_code == 200
+        except Exception:
+            return bool(self.config.api_key)
+
+    def cleanup(self):
+        if self._session:
+            self._session.close()
+            self._session = None
+
+# ==================== ★ 新增：引擎健康监控 ====================
+
+@dataclass
+class EngineHealth:
+    """引擎健康状态"""
+    engine_id: str
+    is_available: bool = False
+    last_check_time: float = 0.0
+    last_response_time: float = 0.0
+    total_requests: int = 0
+    success_count: int = 0
+    failure_count: int = 0
+    avg_response_time: float = 0.0
+    consecutive_failures: int = 0
+    status: str = "unknown"  # healthy / degraded / unhealthy / unknown
+    
+    @property
+    def success_rate(self) -> float:
+        if self.total_requests == 0:
+            return 1.0
+        return self.success_count / self.total_requests
+    
+    def record_success(self, response_time: float):
+        self.total_requests += 1
+        self.success_count += 1
+        self.last_response_time = response_time
+        self.consecutive_failures = 0
+        # 指数移动平均
+        alpha = 0.3
+        self.avg_response_time = (alpha * response_time + 
+                                   (1 - alpha) * self.avg_response_time) if self.avg_response_time else response_time
+        self._update_status()
+    
+    def record_failure(self):
+        self.total_requests += 1
+        self.failure_count += 1
+        self.consecutive_failures += 1
+        self._update_status()
+    
+    def _update_status(self):
+        if self.consecutive_failures >= 3:
+            self.status = "unhealthy"
+        elif self.success_rate < 0.5:
+            self.status = "degraded"
+        elif self.success_rate >= 0.8:
+            self.status = "healthy"
+        else:
+            self.status = "degraded"
+
+
+class HealthMonitor:
+    """引擎健康监控器 — 定期检查引擎状态并记录性能指标"""
+    
+    def __init__(self, check_interval: float = 30.0):
+        self._health: Dict[str, EngineHealth] = {}
+        self._check_interval = check_interval
+        self._running = False
+        self._check_thread: Optional[threading.Thread] = None
+        self._stop_event = threading.Event()
+        self._lock = threading.Lock()
+    
+    def register_engine(self, engine_id: str):
+        with self._lock:
+            if engine_id not in self._health:
+                self._health[engine_id] = EngineHealth(engine_id=engine_id)
+    
+    def get_health(self, engine_id: str) -> Optional[EngineHealth]:
+        with self._lock:
+            return self._health.get(engine_id)
+    
+    def get_all_health(self) -> Dict[str, EngineHealth]:
+        with self._lock:
+            return dict(self._health)
+    
+    def record_success(self, engine_id: str, response_time: float):
+        with self._lock:
+            if engine_id in self._health:
+                self._health[engine_id].record_success(response_time)
+    
+    def record_failure(self, engine_id: str):
+        with self._lock:
+            if engine_id in self._health:
+                self._health[engine_id].record_failure()
+    
+    def update_availability(self, engine_id: str, is_available: bool):
+        with self._lock:
+            if engine_id in self._health:
+                self._health[engine_id].is_available = is_available
+                self._health[engine_id].last_check_time = time.time()
+    
+    def get_health_summary(self) -> Dict[str, Any]:
+        """获取所有引擎的健康摘要"""
+        with self._lock:
+            summary = {}
+            for eng_id, health in self._health.items():
+                summary[eng_id] = {
+                    "status": health.status,
+                    "available": health.is_available,
+                    "success_rate": round(health.success_rate, 3),
+                    "avg_response_time": round(health.avg_response_time, 3),
+                    "total_requests": health.total_requests,
+                    "consecutive_failures": health.consecutive_failures,
+                }
+            return summary
+    
+    def start(self, check_fn: Callable = None):
+        """启动健康检查线程"""
+        if self._running:
+            return
+        self._running = True
+        self._stop_event.clear()
+        self._check_thread = threading.Thread(target=self._run_checks, args=(check_fn,), daemon=True)
+        self._check_thread.start()
+        logger.info("HealthMonitor 已启动")
+    
+    def stop(self):
+        """停止健康检查"""
+        self._running = False
+        self._stop_event.set()
+        if self._check_thread:
+            self._check_thread.join(timeout=2.0)
+        logger.info("HealthMonitor 已停止")
+    
+    def _run_checks(self, check_fn: Callable = None):
+        """健康检查循环"""
+        while not self._stop_event.is_set():
+            if check_fn:
+                try:
+                    check_fn(self)
+                except Exception as e:
+                    logger.warning(f"健康检查异常: {e}")
+            self._stop_event.wait(self._check_interval)
+
+
+# ==================== ★ 新增：响应缓存 ====================
+
+@dataclass
+class CacheEntry:
+    """缓存条目"""
+    response: ChatResponse
+    created_at: float = field(default_factory=time.time)
+    hit_count: int = 0
+
+
+class ResponseCache:
+    """响应缓存 — 对相同 prompt + engine 组合缓存结果"""
+    
+    def __init__(self, max_size: int = 100, ttl: float = 300.0):
+        self._cache: OrderedDict = OrderedDict()
+        self._max_size = max_size
+        self._ttl = ttl  # 缓存生存时间（秒）
+        self._lock = threading.Lock()
+        self._hits = 0
+        self._misses = 0
+    
+    def _make_key(self, prompt: str, engine: str, model: str = "") -> str:
+        """生成缓存键（取 prompt 前 100 字符的哈希）"""
+        short_prompt = prompt[:100] if prompt else ""
+        return f"{engine}:{model}:{hash(short_prompt)}"
+    
+    def get(self, prompt: str, engine: str, model: str = "") -> Optional[ChatResponse]:
+        """获取缓存的响应"""
+        key = self._make_key(prompt, engine, model)
+        with self._lock:
+            entry = self._cache.get(key)
+            if entry is None:
+                self._misses += 1
+                return None
+            if time.time() - entry.created_at > self._ttl:
+                del self._cache[key]
+                self._misses += 1
+                return None
+            entry.hit_count += 1
+            self._hits += 1
+            # 移到末尾（LRU）
+            self._cache.move_to_end(key)
+            return entry.response
+    
+    def set(self, prompt: str, engine: str, model: str, response: ChatResponse):
+        """缓存响应"""
+        key = self._make_key(prompt, engine, model)
+        with self._lock:
+            self._cache[key] = CacheEntry(response=response)
+            if len(self._cache) > self._max_size:
+                self._cache.popitem(last=False)  # 移除最旧的
+    
+    def clear(self):
+        """清空缓存"""
+        with self._lock:
+            self._cache.clear()
+            self._hits = 0
+            self._misses = 0
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """获取缓存统计"""
+        with self._lock:
+            total = self._hits + self._misses
+            return {
+                "size": len(self._cache),
+                "max_size": self._max_size,
+                "hits": self._hits,
+                "misses": self._misses,
+                "hit_rate": round(self._hits / total, 3) if total > 0 else 0.0,
+            }
+
+# ★ v3.52: Agent 角色预设
+AGENT_ROLES = {
+    "coder": {
+        "name": "代码专家",
+        "system_prompt": "你是一个专业的代码工程师，擅长编写、审查和优化代码。回答要简洁专业，给出可执行的代码示例。",
+        "think": True,
+        "temperature": 0.3,
+    },
+    "analyst": {
+        "name": "分析师",
+        "system_prompt": "你是一个数据分析师，擅长分析问题、整理信息、生成报告。回答要有条理，使用表格和列表。",
+        "think": True,
+        "temperature": 0.5,
+    },
+    "writer": {
+        "name": "写作专家",
+        "system_prompt": "你是一个写作专家，擅长撰写文档、文章、邮件。回答要流畅自然，结构清晰。",
+        "think": False,
+        "temperature": 0.7,
+    },
+    "assistant": {
+        "name": "助手",
+        "system_prompt": "你是一个智能助手，帮助用户解决各种问题。回答要友好、有帮助。",
+        "think": False,
+        "temperature": 0.7,
+    },
+}
+
+
+def _trim_old_tool_results(messages: list, max_chars: int):
+    current_chars = sum(len(m.get("content", "")) for m in messages)
+    if current_chars <= max_chars:
+        return
+    protected_indices = set()
+    tool_msg_indices = [i for i, m in enumerate(messages) if m.get("role") == "tool"]
+    for i in range(len(messages)):
+        if messages[i].get("role") in ("system",):
+            protected_indices.add(i)
+    last_tool_runs = 0
+    for i in range(len(messages) - 1, -1, -1):
+        if messages[i].get("role") == "tool":
+            protected_indices.add(i)
+            last_tool_runs += 1
+            if last_tool_runs >= 3:
+                break
+    for i in range(len(messages) - 1, -1, -1):
+        if messages[i].get("role") == "assistant" and i not in protected_indices:
+            protected_indices.add(i)
+            break
+    for i in range(len(messages) - 1, -1, -1):
+        if messages[i].get("role") == "user" and i not in protected_indices:
+            protected_indices.add(i)
+            break
+    for idx in tool_msg_indices:
+        if current_chars <= max_chars:
+            break
+        if idx in protected_indices:
+            continue
+        old_len = len(messages[idx].get("content", ""))
+        if old_len > 200:
+            truncated = messages[idx]["content"][:200] + f"\n...(compressed from {old_len} chars)"
+            messages[idx]["content"] = truncated
+            current_chars -= (old_len - len(truncated))
+    for idx in tool_msg_indices:
+        if current_chars <= max_chars:
+            break
+        if idx in protected_indices:
+            continue
+        old_len = len(messages[idx].get("content", ""))
+        if old_len > 50:
+            truncated = messages[idx]["content"][:50] + "...(trimmed)"
+            messages[idx]["content"] = truncated
+            current_chars -= (old_len - len(truncated))
+
+
+def _is_transient_error(error: str) -> bool:
+    """★ v3.69: 判断错误是否为瞬时性（值得重试）
+
+    瞬时错误特征：
+    - 超时 (timeout, timed out)
+    - 连接重置 (ConnectionResetError, ConnectionError)
+    - 临时不可用 (temporary, temporarily)
+    - 网络问题 (network, unreachable, broken pipe)
+
+    非瞬时错误（不重试）：
+    - 参数错误 (参数, argument, parameter)
+    - 文件不存在 (not found, 不存在)
+    - 权限不足 (permission, denied)
+    - 语法错误 (syntax, invalid)
+    """
+    if not error:
+        return False
+    error_lower = str(error).lower()
+
+    # 瞬时错误关键词
+    transient_keywords = [
+        "timeout", "timed out", "超时",
+        "connectionreset", "connectionerror", "connection aborted",
+        "temporary", "temporarily", "暂时",
+        "network", "unreachable", "broken pipe",
+        "retry", "重试",
+        "500", "502", "503", "504",  # HTTP 服务器错误
+        "busy", "overloaded",
+    ]
+    # 非瞬时错误关键词（优先级更高）
+    permanent_keywords = [
+        "not found", "不存在", "no such file",
+        "permission", "denied", "权限",
+        "syntax", "invalid", "语法",
+        "argument", "parameter", "参数",
+        "type error", "value error", "类型错误",
+        "空", "empty", "为空",
+    ]
+
+    # 先检查是否为永久性错误
+    for kw in permanent_keywords:
+        if kw in error_lower:
+            return False
+
+    # 再检查是否为瞬时性错误
+    for kw in transient_keywords:
+        if kw in error_lower:
+            return True
+
+    return False  # 默认不重试
+
+
+_DANGEROUS_COMMAND_PATTERNS = [
+    r'\brm\s+-rf\s+/',
+    r'\brm\s+-rf\s+~',
+    r'\bformat\s+[A-Za-z]:',
+    r'\bdd\s+if=',
+    r'\bmkfs\b',
+    r'\bshutdown\b',
+    r'\breboot\b',
+    r'\bhalt\b',
+    r'\bpoweroff\b',
+    r'\biptables\b',
+    r'\bnetsh\b.*\bfirewall\b',
+    r'\breg\b.*\bdelete\b',
+    r'\btaskkill\b.*/f\b',
+    r'\bdel\s+/[sfq]\s+[A-Za-z]:\\',
+    r'\brmdir\s+/[sfq]\s+[A-Za-z]:\\',
+]
+
+import re as _re
+_DANGEROUS_COMPILED = [_re.compile(p, _re.IGNORECASE) for p in _DANGEROUS_COMMAND_PATTERNS]
+
+
+def _validate_tool_args(tool_name: str, tool_args: dict) -> str:
+    if tool_name in ("run_command", "execute_command", "shell_exec", "bash"):
+        cmd = tool_args.get("command", "") or tool_args.get("cmd", "") or ""
+        if not cmd:
+            return ""
+        for pat in _DANGEROUS_COMPILED:
+            if pat.search(cmd):
+                return f"Blocked: dangerous command pattern in '{cmd[:80]}'"
+    if tool_name in ("write_file", "edit_file", "multi_edit"):
+        fp = tool_args.get("file_path", "") or tool_args.get("path", "") or ""
+        if fp:
+            _normalized = os.path.normpath(fp)
+            if ".." in _normalized.split(os.sep):
+                return f"Blocked: path traversal detected in '{fp}'"
+            if any(_normalized.startswith(p) for p in (
+                "/etc/", "/sys/", "/proc/", "/root/",
+                "C:\\Windows\\", "C:\\Program", "C:\\Users\\All Users",
+            )):
+                return f"Blocked: writing to system path '{fp}'"
+        _content = tool_args.get("content", "") or tool_args.get("new_string", "") or ""
+        if _content and len(_content) > 500000:
+            return f"Blocked: content too large ({len(_content)} chars, max 500000)"
+    if tool_name in ("delete_file", "remove_file", "rm"):
+        fp = tool_args.get("file_path", "") or tool_args.get("path", "") or ""
+        if fp:
+            _normalized = os.path.normpath(fp)
+            if ".." in _normalized.split(os.sep):
+                return f"Blocked: path traversal in delete '{fp}'"
+    return ""
+
+
+class EngineManager(QObject):
+    """
+    统一AI调用入口
+    
+    所有AI调用都通过这个类，消除分散调用的问题。
+    
+    使用示例：
+        # 基本使用
+        engine = EngineManager()
+        response = engine.chat("你好")
+        
+        # 指定引擎
+        response = engine.chat("你好", engine="ollama")
+        
+        # 指定模型
+        response = engine.chat("你好", model="qwen3.5:4b")
+        
+        # 流式输出
+        for token in engine.stream_chat("你好"):
+            print(token, end="")
+    """
+    
+    # ★ PyQt5 信号定义 — 用于通知 UI 组件
+    message_complete = pyqtSignal(str)     # 消息完成时发射
+    token_received = pyqtSignal(str)       # 收到 token 时发射（流式输出）
+    error_occurred = pyqtSignal(str)       # 错误发生时发射
+    thinking_received = pyqtSignal(str)    # 思考过程时发射
+    engine_changed = pyqtSignal(str)       # 引擎切换时发射
+    tool_call_received = pyqtSignal(str)   # 工具调用 JSON
+    tool_call_made = pyqtSignal(dict)      # ★ v3.62: Agent 工具调用执行结果
+    tool_call_starting = pyqtSignal(dict)  # v3.82-F5: Agent 工具调用即将执行
+    agent_iteration = pyqtSignal(dict)     # Agent 每轮迭代状态（iteration/engine/time_elapsed）
+    model_list_updated = pyqtSignal(list)  # 模型列表更新
+    
+    # ★ 缓存配置
+    _CACHE_MAX_SIZE = 50          # 最多缓存条数
+    _CACHE_TTL_SECONDS = 300      # 缓存有效期（5分钟）
+    _HISTORY_MAX_PER_SESSION = 40  # 每个会话最多保留历史条数
+    
+    def __init__(self):
+        super().__init__()  # ★ 必须调用 QObject.__init__
+        self._engines: Dict[str, Any] = {}
+        self._configs: Dict[str, EngineConfig] = {}
+        self._active_engine: str = "ollama"
+        self._fallback_order: List[str] = ["deepseek", "siliconflow", "ollama", "mimocode"]
+        self._lock = threading.Lock()
+        # ★ v3.63: Agent 循环取消标志（必须在 __init__ 中初始化）
+        # agent_chat 在循环中检查此标志；为 True 时提前退出并返回已积累结果
+        self._cancel_flag: bool = False
+        self._cancel_lock = threading.Lock()
+        # ★ v3.81: Stream Interrupt/Resume — 保存最近一次 agent_chat 的恢复点
+        self._last_agent_state: Dict = {}
+        self._agent_state_lock = threading.Lock()
+        
+        # 对话历史（使用 OrderedDict 便于 LRU 淘汰）
+        self._history: Dict[str, List[Dict]] = {}
+        self._max_history: int = 20
+        
+        # ★ 响应缓存（LRU + TTL）— 已有
+        self._cache: OrderedDict = OrderedDict()
+        self._cache_lock = threading.Lock()
+        
+        # ★ 弱引用回调列表（用于通知外部组件）
+        self._status_callbacks: List[weakref.ref] = []
+        
+        # ★ 新增：健康监控
+        self._health_monitor = HealthMonitor(check_interval=30.0)
+        
+        # ★ 新增：结构化响应缓存（与原有 _cache 互补）
+        self._response_cache = ResponseCache(max_size=self._CACHE_MAX_SIZE, 
+                                              ttl=self._CACHE_TTL_SECONDS)
+        self._cache_enabled = True
+        
+        # ★ 新增：性能统计
+        self._perf_stats: Dict[str, Dict[str, Any]] = defaultdict(lambda: {
+            "total_requests": 0,
+            "total_time": 0.0,
+            "min_time": float('inf'),
+            "max_time": 0.0,
+            "last_request_time": 0.0,
+        })
+        
+        # ★ v3.52: Skills 启用标记
+        self._skills_enabled = True
+        
+        # ★ B3: 任务处理状态标记（防止处理中切换引擎）
+        self._processing = False
+
+        # ★ M6: Ollama 负载均衡器（延迟导入避免循环依赖）
+        global OllamaLoadBalancer
+        logger.info(f"[EngineManager] 准备加载 OllamaLoadBalancer (当前状态: {OllamaLoadBalancer})")
+        if OllamaLoadBalancer is None:
+            try:
+                logger.info("[EngineManager] 尝试延迟导入 core.ollama_load_balancer ...")
+                from core.ollama_load_balancer import OllamaLoadBalancer as _LB
+                OllamaLoadBalancer = _LB
+                logger.info("[EngineManager] ✅ 延迟导入 OllamaLoadBalancer 成功！")
+            except ImportError as e:
+                logger.warning(f"[EngineManager] ⚠️ 延迟导入 OllamaLoadBalancer 失败: {e}")
+        self._ollama_lb = OllamaLoadBalancer(max_concurrent=2) if OllamaLoadBalancer else None
+        logger.info(f"[EngineManager] _ollama_lb 初始化完成: {'已启用' if self._ollama_lb else '未启用 (将降级)'}")
+
+        # ★ P1-4: 每引擎并发信号量 — 防止高并发下显存溢出
+        self._engine_semaphores: Dict[str, threading.Semaphore] = {
+            "ollama": threading.Semaphore(2),
+            "deepseek": threading.Semaphore(10),
+            "mimocode": threading.Semaphore(2),
+            "miemie_v1": threading.Semaphore(1),
+        }
+
+        # ★ Req6: 引擎健康状态追踪
+        self._engine_health_status: Dict[str, str] = {}
+        self._engine_failure_counts: Dict[str, int] = defaultdict(int)
+        self._engine_health_lock = threading.Lock()
+
+        # ★ Req7: 工具调用统计持久化
+        self._tool_stats_path = os.path.expanduser("~/.lemoncode/tool_stats.json")
+        self._tool_stats: Dict[str, Dict[str, Any]] = {}
+        self._tool_stats_lock = threading.Lock()
+        self._load_tool_stats()
+
+        # ★ Req11: 安全沙箱增强 — dry-run 模式开关
+        self._dry_run_mode = False
+
+        # ★ P2-1: 遥测报告器（延迟初始化）
+        self._telemetry = None
+
+        # 初始化默认配置
+        self._init_default_configs()
+    
+    def _init_default_configs(self):
+        """初始化默认配置"""
+        # Ollama 配置
+        self._configs["ollama"] = EngineConfig(
+            engine_type=EngineType.OLLAMA,
+            host="127.0.0.1",
+            port=11434,
+            model="qwen2.5:1.5b",
+            num_predict=1500,
+            timeout=600,  # ★ v4.7.17+: 8B 模型工具调用链需 >120s，显式 600s（10分钟）
+        )
+        
+        # MIMO Code 配置
+        self._configs["mimocode"] = EngineConfig(
+            engine_type=EngineType.MIMOCODE,
+            host="127.0.0.1",
+            port=4097,
+            model="mimo"
+        )
+        
+        # DeepSeek 配置（需要API Key）
+        self._configs["deepseek"] = EngineConfig(
+            engine_type=EngineType.DEEPSEEK,
+            api_key=self._find_deepseek_key(),
+            model="deepseek-v4-flash",
+            timeout=60
+        )
+        self._deepseek_display_name = "DeepSeek(测试)"
+
+        # ★ MIEMIE.V1 配置（本机 Ollama 别名，代码审美/风格评审）
+        self._configs["miemie_v1"] = EngineConfig(
+            engine_type=EngineType.MIEMIE_V1,
+            host="127.0.0.1",
+            port=11434,
+            model="MIEMIE.V1",
+            timeout=180,
+            num_predict=2000,
+        )
+
+    def _find_deepseek_key(self) -> str:
+        """自动查找 DeepSeek API Key"""
+        # 环境变量
+        key = os.environ.get("DEEPSEEK_API_KEY", "")
+        if key:
+            return key
+        # 项目根目录 .deepseek_key
+        candidates = [
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".deepseek_key"),
+            os.path.expanduser("~/.deepseek_key"),
+        ]
+        for p in candidates:
+            try:
+                if os.path.exists(p):
+                    with open(p, "r") as f:
+                        k = f.read().strip()
+                        if k:
+                            return k
+            except Exception:
+                pass
+        return ""
+    
+    def initialize(self):
+        """初始化所有引擎"""
+        # 创建适配器
+        self._engines["ollama"] = OllamaAdapter(self._configs["ollama"])
+        self._engines["mimocode"] = MimoCodeAdapter(self._configs["mimocode"])
+        self._engines["deepseek"] = DeepSeekAdapter(self._configs["deepseek"])
+        # ★ MIEMIE.V1 适配器（代码审美/风格评审专用）
+        self._engines["miemie_v1"] = MiemieV1Adapter(self._configs["miemie_v1"])
+        
+        # ★ 注册引擎到健康监控
+        for eng_name in self._engines:
+            self._health_monitor.register_engine(eng_name)
+        
+        # 检测可用引擎
+        self._detect_available_engines()
+        
+        # ★ 启动健康监控
+        self._health_monitor.start(check_fn=self._check_engines_health)
+        # ★ 加载已持久化的自定义引擎
+        self.load_custom_engines()
+        logger.info("EngineManager 初始化完成，健康监控已启动")
+    
+    def _detect_available_engines(self):
+        """检测可用引擎"""
+        available = []
+        for name, engine in self._engines.items():
+            is_avail = engine.is_available()
+            if is_avail:
+                available.append(name)
+                logger.info(f"{name} 可用")
+            else:
+                logger.warning(f"{name} 不可用")
+            # ★ 更新健康监控
+            self._health_monitor.update_availability(name, is_avail)
+        
+        # 设置默认引擎：优先云端 API（DeepSeek），其次本地 Ollama，最后 MIMO
+        if "deepseek" in available:
+            self._active_engine = "deepseek"
+        elif "ollama" in available:
+            self._active_engine = "ollama"
+        elif "mimocode" in available:
+            self._active_engine = "mimocode"
+
+        # 更新回退顺序与默认一致（★ miemie_v1 加入降级顺序：deepseek → ollama → miemie_v1 → mimocode）
+        self._fallback_order = [e for e in ["deepseek", "siliconflow", "ollama", "miemie_v1", "mimocode"] if e in available]
+
+        logger.info(f"当前引擎: {self._active_engine}, 可用引擎: {available}")
+    
+    def chat(self, prompt: str, **kwargs) -> ChatResponse:
+        """
+        发送对话请求（统一入口）
+        
+        参数：
+            prompt: 用户输入
+            engine: 指定引擎（可选）
+            model: 指定模型（可选）
+            system_prompt: 系统提示词（可选）
+            history: 对话历史（可选）
+            use_cache: 是否使用缓存（默认 True）
+            role: Agent 角色（可选，如 "coder"/"analyst"/"writer"/"assistant"）
+            think: 是否启用思考模式（可选）
+        
+        返回：
+            ChatResponse 对象
+        """
+        engine_name = kwargs.get("engine", self._active_engine)
+        model = kwargs.get("model", "")
+        system_prompt = kwargs.get("system_prompt", "")
+        history = kwargs.get("history", [])
+        use_cache = kwargs.get("use_cache", True)
+        role = kwargs.get("role", "")
+        # ★ C-T03: 显式降级开关（默认关闭，遵守 v3.60 不自动回退原则；仅 miemie_v1 等场景可开启）
+        enable_fallback = kwargs.get("enable_fallback", False)
+        
+        # ★ v3.52: 上下文压缩 — 保留最近5轮 + 摘要
+        if len(history) > 10:
+            history = self._compress_history(history)
+        
+        # ★ v3.52: 添加上下文摘要
+        if history and not system_prompt and len(history) > 6:
+            summary = self._summarize_context(history)
+            system_prompt = f"对话上下文摘要：{summary}"
+        
+        # ★ v3.52: 应用 Agent 角色
+        if role and role in AGENT_ROLES:
+            role_config = AGENT_ROLES[role]
+            system_prompt = role_config["system_prompt"]
+            kwargs["think"] = role_config.get("think", False)
+            kwargs["temperature"] = role_config.get("temperature", 0.7)
+        
+        # ★ v3.52: Skills 预处理
+        if self._skills_enabled:
+            prompt = self._apply_skills(prompt, kwargs)
+        
+        # ★ 检查缓存
+        if use_cache and not system_prompt and not history:
+            cached = self._get_cached(prompt, engine_name, model)
+            if cached is not None:
+                return cached
+        
+        # 构建消息列表
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        
+        # 添加历史对话
+        if history:
+            messages.extend(history)
+        
+        # 添加当前输入
+        messages.append({"role": "user", "content": prompt})
+        
+        # ★ B3: 标记任务处理中
+        self._processing = True
+        try:
+            # 尝试调用（★ v3.60: 禁止自动回退，只使用指定引擎）
+            start_time = time.time()
+            last_error = None
+            
+            # ★ v3.60: 只使用指定引擎，不自动回退
+            eng_name = engine_name
+            try:
+                engine = self._engines.get(eng_name)
+                if not engine:
+                    raise RuntimeError(f"引擎 {eng_name} 不存在")
+                    
+                kwargs_chat = {}
+                if model:
+                    kwargs_chat["model"] = model
+                
+                content = engine.chat(messages, **kwargs_chat)
+                response_time = time.time() - start_time
+                
+                response = ChatResponse(
+                    content=content,
+                    engine=eng_name,
+                    model=model or self._configs[eng_name].model,
+                    response_time=response_time,
+                    from_fallback=False
+                )
+                
+                # ★ 发射消息完成信号
+                try:
+                    self.message_complete.emit(content)
+                except Exception:
+                    pass  # 信号发射失败不影响主流程
+                
+                if use_cache and not system_prompt and not history:
+                    self._set_cached(prompt, engine_name, model, response)
+                
+                self._health_monitor.record_success(eng_name, response_time)
+                self._record_perf(eng_name, response_time)
+                
+                return response
+            except Exception as e:
+                last_error = e
+                logger.warning(f"{eng_name} 失败: {e}")
+                self._health_monitor.record_failure(eng_name)
+                # ★ 发射错误信号
+                try:
+                    self.error_occurred.emit(str(e))
+                except Exception:
+                    pass
+
+                # ★ C-T03: 显式降级路径（仅 enable_fallback=True 时触发）
+                if enable_fallback:
+                    for fb in self._fallback_order:
+                        if fb == eng_name:
+                            continue
+                        try:
+                            fb_engine = self._engines.get(fb)
+                            if not fb_engine:
+                                continue
+                            fb_content = fb_engine.chat(messages, **kwargs_chat)
+                            fb_time = time.time() - start_time
+                            fb_response = ChatResponse(
+                                content=fb_content,
+                                engine=fb,
+                                model=model or self._configs[fb].model,
+                                response_time=fb_time,
+                                from_fallback=True,
+                            )
+                            try:
+                                self.message_complete.emit(fb_content)
+                            except Exception:
+                                pass
+                            self._health_monitor.record_success(fb, fb_time)
+                            return fb_response
+                        except Exception as fb_e:
+                            logger.warning(f"降级引擎 {fb} 也失败: {fb_e}")
+                            self._health_monitor.record_failure(fb)
+                            last_error = fb_e
+
+            logger.error(f"引擎 {eng_name} 失败: {last_error}")
+            # ★ 发射错误信号
+            try:
+                self.error_occurred.emit(f"引擎 {eng_name} 失败: {last_error}")
+            except Exception:
+                pass
+            raise RuntimeError(f"引擎 {eng_name} 失败: {last_error}")
+        finally:
+            self._processing = False
+    
+    def stream_chat(self, prompt: str, **kwargs):
+        """
+        流式对话（生成器）
+        
+        使用示例：
+            for token in engine.stream_chat("你好"):
+                print(token, end="")
+        """
+        engine_name = kwargs.get("engine", self._active_engine)
+        model = kwargs.get("model", "")
+        system_prompt = kwargs.get("system_prompt", "")
+        
+        # Ollama 流式实现
+        if engine_name == "ollama" and requests:
+            messages = []
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            messages.append({"role": "user", "content": prompt})
+            
+            payload = {
+                "model": model or self._configs["ollama"].model,
+                "messages": messages,
+                "stream": True,
+                "options": {
+                    "num_predict": self._configs["ollama"].num_predict
+                }
+            }
+            
+            # ★ 使用 Session 的连接池 + 分离连接/读取超时
+            session = self._engines.get("ollama")
+            if session and hasattr(session, '_get_session'):
+                sess = session._get_session()
+            else:
+                sess = requests
+            
+            response = sess.post(
+                f"{self._configs['ollama'].base_url}/api/chat",
+                json=payload,
+                stream=True,
+                timeout=(10, 600)  # (连接超时10s, 读取超时600s) ★ v4.7.17+: 300→600 对齐 8B 模型
+            )
+            
+            for line in response.iter_lines():
+                if line:
+                    try:
+                        data = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if "message" in data:
+                        token = data["message"].get("content", "")
+                        # ★ 发射 token 信号
+                        try:
+                            self.token_received.emit(token)
+                        except Exception:
+                            pass
+                        yield token
+        
+        # 非流式回退
+        else:
+            result = self.chat(prompt, **kwargs)
+            yield result.content
+    
+    def _get_engine_order(self, preferred: str) -> List[str]:
+        """获取引擎调用顺序（首选 + 回退）"""
+        order = [preferred]
+        for eng in self._fallback_order:
+            if eng != preferred:
+                order.append(eng)
+        return order
+    
+    def switch_engine(self, engine_name: str) -> bool:
+        if engine_name not in self._engines:
+            return False
+        self._active_engine = engine_name
+        return True
+
+    def get_active_engine_id(self) -> str:
+        return self._active_engine
+
+    def set_active_engine(self, engine_name: str):
+        if engine_name in self._engines:
+            if self._processing:
+                logger.warning(f"[EngineManager] 正在处理任务时切换引擎: {self._active_engine} -> {engine_name}")
+            self._active_engine = engine_name
+
+    def reset_engine_health(self, engine_name: str = ""):
+        with self._engine_health_lock:
+            if engine_name:
+                self._engine_health_status.pop(engine_name, None)
+                self._engine_failure_counts.pop(engine_name, None)
+                logger.info(f"[EngineManager] 引擎健康状态已重置: {engine_name}")
+            else:
+                self._engine_health_status.clear()
+                self._engine_failure_counts.clear()
+                logger.info("[EngineManager] 所有引擎健康状态已重置")
+
+    def _is_engine_down(self, engine_name: str) -> bool:
+        with self._engine_health_lock:
+            return self._engine_health_status.get(engine_name) == "down"
+
+    def _record_engine_failure(self, engine_name: str):
+        with self._engine_health_lock:
+            self._engine_failure_counts[engine_name] += 1
+            count = self._engine_failure_counts[engine_name]
+            if count >= 3:
+                self._engine_health_status[engine_name] = "down"
+                logger.warning(f"[EngineManager] 引擎 {engine_name} 连续失败 {count} 次，标记为 DOWN")
+
+    def _record_engine_success(self, engine_name: str):
+        with self._engine_health_lock:
+            self._engine_failure_counts[engine_name] = 0
+            self._engine_health_status.pop(engine_name, None)
+
+    def _load_tool_stats(self):
+        try:
+            if os.path.exists(self._tool_stats_path):
+                with open(self._tool_stats_path, "r", encoding="utf-8") as f:
+                    self._tool_stats = json.load(f)
+        except Exception:
+            self._tool_stats = {}
+
+    def _save_tool_stats(self):
+        try:
+            os.makedirs(os.path.dirname(self._tool_stats_path), exist_ok=True)
+            with open(self._tool_stats_path, "w", encoding="utf-8") as f:
+                json.dump(self._tool_stats, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+
+    def _record_tool_call(self, tool_name: str, elapsed: float, success: bool):
+        with self._tool_stats_lock:
+            entry = self._tool_stats.setdefault(tool_name, {
+                "total_calls": 0, "successes": 0, "failures": 0,
+                "total_time": 0.0, "max_time": 0.0, "last_called": 0.0,
+            })
+            entry["total_calls"] += 1
+            if success:
+                entry["successes"] += 1
+            else:
+                entry["failures"] += 1
+            entry["total_time"] += elapsed
+            if elapsed > entry["max_time"]:
+                entry["max_time"] = elapsed
+            entry["last_called"] = time.time()
+        self._save_tool_stats()
+
+    def get_tool_stats(self, tool_name: str = "") -> Dict[str, Any]:
+        with self._tool_stats_lock:
+            if tool_name:
+                return dict(self._tool_stats.get(tool_name, {}))
+            return {k: dict(v) for k, v in self._tool_stats.items()}
+
+    def get_dynamic_tool_timeout(self, tool_name: str, default_timeout: int = 30) -> int:
+        with self._tool_stats_lock:
+            entry = self._tool_stats.get(tool_name)
+            if entry and entry.get("total_calls", 0) >= 5:
+                avg = entry["total_time"] / entry["total_calls"]
+                dynamic = int(avg * 2.5) + 10
+                return min(max(dynamic, default_timeout), 300)
+        return default_timeout
+
+    def set_dry_run(self, enabled: bool):
+        self._dry_run_mode = enabled
+        logger.info(f"[EngineManager] dry-run 模式: {'启用' if enabled else '关闭'}")
+
+    def is_dry_run(self) -> bool:
+        return self._dry_run_mode
+
+    def set_model(self, engine_name: str, model: str):
+        if engine_name in self._configs:
+            clean = model.replace("(测试)", "").strip()
+            self._configs[engine_name].model = clean
+    
+    def set_api_key(self, engine_name: str, api_key: str):
+        """设置API密钥（用于DeepSeek等）"""
+        if engine_name in self._configs:
+            self._configs[engine_name].api_key = api_key
+
+    def add_custom_engine(self, provider_id: str, display_name: str,
+                          api_base: str, api_key: str, model: str,
+                          models: Optional[List[str]] = None) -> Dict[str, Any]:
+        """动态注册 OpenAI 兼容引擎
+
+        Args:
+            provider_id: 唯一 ID（如 'moonshot', 'zhipu', 'my_qwen'）
+            display_name: 显示名（如 'Moonshot / Kimi'）
+            api_base: API base URL（如 'https://api.moonshot.cn/v1'）
+            api_key: API 密钥
+            model: 默认模型 ID
+            models: 可选模型列表
+
+        Returns:
+            {"success": bool, "message": str, "engine_id": str}
+        """
+        if not api_base:
+            return {"success": False, "message": "API Endpoint required"}
+        if not model:
+            return {"success": False, "message": "Model name required"}
+
+        engine_id = f"compat_{provider_id}"
+        config = EngineConfig(
+            engine_type=EngineType.OPENAI_COMPAT,
+            api_base=api_base.rstrip("/"),
+            api_key=api_key,
+            model=model,
+            timeout=600,
+        )
+        adapter = OpenAICompatAdapter(
+            config, provider_id=provider_id,
+            display_name=display_name, models=models,
+        )
+        self._engines[engine_id] = adapter
+        self._configs[engine_id] = config
+        self._fallback_order.append(engine_id)
+        self._engine_semaphores[engine_id] = threading.Semaphore(2)
+
+        self._health_monitor.register_engine(engine_id)
+        is_avail = adapter.is_available()
+        self._health_monitor.update_availability(engine_id, is_avail)
+
+        logger.info(f"[EngineManager] Custom engine registered: {engine_id} ({display_name}) available={is_avail}")
+
+        config_path = os.path.expanduser("~/.lemoncode/custom_engines.json")
+        self._save_custom_engine_config(provider_id, display_name, api_base, api_key, model, models, config_path)
+
+        return {"success": True, "message": f"Engine {display_name} registered", "engine_id": engine_id, "available": is_avail}
+
+    def test_custom_engine(self, api_base: str, api_key: str, model: str) -> Dict[str, Any]:
+        """测试 OpenAI 兼容端点连通性
+
+        Returns:
+            {"success": bool, "message": str, "models": list}
+        """
+        if not requests:
+            return {"success": False, "message": "requests not installed"}
+        try:
+            base = api_base.rstrip("/")
+            headers = {"Content-Type": "application/json"}
+            if api_key:
+                headers["Authorization"] = f"Bearer {api_key}"
+            resp = requests.get(f"{base}/models", headers=headers, timeout=8)
+            if resp.status_code == 200:
+                data = resp.json().get("data", [])
+                model_ids = [m.get("id", "") for m in data if m.get("id")]
+                return {"success": True, "message": f"Connected, {len(model_ids)} models found", "models": model_ids}
+            elif resp.status_code == 401:
+                return {"success": False, "message": "API Key invalid (HTTP 401)", "models": []}
+            else:
+                return {"success": False, "message": f"HTTP {resp.status_code}", "models": []}
+        except requests.exceptions.ConnectionError:
+            return {"success": False, "message": "Connection failed — check URL and network", "models": []}
+        except Exception as e:
+            return {"success": False, "message": str(e), "models": []}
+
+    def _save_custom_engine_config(self, provider_id, display_name, api_base, api_key, model, models, config_path):
+        """持久化自定义引擎配置"""
+        try:
+            os.makedirs(os.path.dirname(config_path), exist_ok=True)
+            existing = {}
+            if os.path.exists(config_path):
+                with open(config_path, "r", encoding="utf-8") as f:
+                    existing = json.load(f)
+            existing[provider_id] = {
+                "display_name": display_name,
+                "api_base": api_base,
+                "api_key": api_key,
+                "model": model,
+                "models": models or [],
+            }
+            with open(config_path, "w", encoding="utf-8") as f:
+                json.dump(existing, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.warning(f"[EngineManager] Failed to save custom engine config: {e}")
+
+    def load_custom_engines(self):
+        """启动时加载已持久化的自定义引擎"""
+        config_path = os.path.expanduser("~/.lemoncode/custom_engines.json")
+        if not os.path.exists(config_path):
+            return
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            for provider_id, cfg in data.items():
+                self.add_custom_engine(
+                    provider_id=provider_id,
+                    display_name=cfg.get("display_name", provider_id),
+                    api_base=cfg.get("api_base", ""),
+                    api_key=cfg.get("api_key", ""),
+                    model=cfg.get("model", ""),
+                    models=cfg.get("models", []),
+                )
+            logger.info(f"[EngineManager] Loaded {len(data)} custom engines from {config_path}")
+        except Exception as e:
+            logger.warning(f"[EngineManager] Failed to load custom engines: {e}")
+
+    # ==================== v3.62: 真正的 Agent 工具调用循环 ====================
+
+    _AGENT_MAX_ITERATIONS = 10
+    _ITERATION_TIMEOUT_SECONDS = 120
+    _TOOL_TIMEOUT_SECONDS = 30
+    _COMPLEXITY_ITERATIONS = None  # lazy init after TaskClassifier import
+    _AGENT_SYSTEM_PROMPT = (
+        "你是 Lemon Code Agent，一个智能编程助手。\n\n"
+        "## 核心原则\n"
+        "1. **先思考再行动**：分析用户需求，选择最合适的工具\n"
+        "2. **工具调用后总结**：工具返回结果后，必须用自然语言总结要点，不要只返回原始结果\n"
+        "3. **失败时降级**：工具失败时，尝试其他方法或说明原因\n"
+        "4. **路径处理**：文件路径用相对路径，路径不存在时尝试扩大搜索\n"
+        "5. **参数准确**：调用工具时参数名必须与工具定义完全一致，不要编造参数\n\n"
+        "## 工具选择指南（按场景）\n"
+        "- 执行代码 → execute_code（参数: code, language='python'）\n"
+        "- 读文件 → read_file（参数: file_path, max_lines=200）\n"
+        "- 写文件 → write_file（参数: file_path, content）\n"
+        "- 编辑文件 → edit_file（参数: file_path, old_string, new_string）\n"
+        "- 搜索代码 → grep_search（参数: pattern, path='', file_pattern=''）\n"
+        "  · path 留空=当前目录；搜索范围会自动扩大到项目根\n"
+        "  · file_pattern 例: '*.py' 可限定文件类型\n"
+        "- 语义搜索 → search_codebase（参数: information_request）\n"
+        "  · 用自然语言描述要找的代码意图，如 'agent 工具调用循环'\n"
+        "- 项目扫描 → scan_project（参数: path='.'）\n"
+        "- 网页搜索 → web_search（参数: query, num=5）\n"
+        "- 网页获取 → web_fetch（参数: url）\n"
+        "- 任务管理 → todo_write（参数: todos JSON, merge=False）\n\n"
+        "## 工具调用最佳实践\n"
+        "- **路径不存在**：先 scan_project 查看目录结构，再 read_file\n"
+        "- **搜索无结果**：grep_search 会自动扩大到项目根目录；如仍无结果，调整 pattern 或换用 search_codebase\n"
+        "- **多步骤任务**：先 scan_project → 再 grep_search → 最后 read_file\n"
+        "- **代码执行失败**：检查代码语法，确认 language 参数正确\n"
+        "- **避免冗余**：一次只调用必要的工具，不要重复调用相同工具\n\n"
+        "## 输出格式（重要）\n"
+        "- **先给结论**：第一句话直接回答用户问题\n"
+        "- **再给细节**：结论后补充关键信息，用列表或表格组织\n"
+        "- 代码块用 ```语言 包裹\n"
+        "- 表格用 Markdown 格式\n"
+        "- 长输出分段，每段不超过 30 行\n"
+        "- **工具结果要提炼**：不要原样复制工具输出，提取关键信息\n"
+        "- 中文回复，简洁明了\n\n"
+        "## 错误处理\n"
+        "- 工具失败时，说明失败原因，建议用户下一步操作\n"
+        "- 不要重复调用同一个工具超过 3 次\n"
+        "- 工具结果为空时，尝试调整参数或换用其他工具\n\n"
+        "## 多轮对话\n"
+        "- 你能看到之前的对话历史，可以引用'刚才那个文件'、'上面的代码'等\n"
+        "- 如果用户的问题与之前相关，先回顾历史再回答\n\n"
+        "## ★ 防偷懒规则（严格遵守）\n"
+        "1. **禁止假完成**：不要说'已完成'但实际没调用任何工具验证\n"
+        "2. **多步骤任务**：用户要求'先A再B'时，必须依次执行 A 和 B，不能只做 A\n"
+        "3. **结果验证**：调用工具后，检查结果是否真的解决了问题\n"
+        "4. **禁止空回复**：不要返回空内容或'我无法...'而不尝试替代方案\n"
+        "5. **禁止重复**：不要用相同参数重复调用同一工具超过 2 次\n"
+        "6. **完成判定**：只有当你能用一句话总结'做了什么+结果如何'时，才算完成\n\n"
+        "## 失败反思规则\n"
+        "1. 工具失败时不要立即放弃，先分析原因\n"
+        "2. 检查参数是否正确、路径是否存在\n"
+        "3. 尝试用不同的工具或策略\n"
+        "4. 如果确实无法解决，向用户解释原因并请求帮助"
+    )
+
+    # ★ v3.63: Agent 取消控制（线程安全）
+    def cancel_agent(self):
+        """取消正在运行的 agent_chat 循环。
+        线程安全：使用 _cancel_lock 保护标志写入。
+        agent_chat 在每次循环开始时检查 _cancel_flag，为 True 时立即退出。"""
+        with self._cancel_lock:
+            self._cancel_flag = True
+        logger.info("[Agent] 收到取消请求，将在下一次循环检查时退出")
+
+    def reset_cancel(self):
+        """重置取消标志（在开始新的 agent_chat 之前调用）"""
+        with self._cancel_lock:
+            self._cancel_flag = False
+
+    def resume_agent(self, **overrides) -> Dict:
+        """★ v3.81: 从上次中断处恢复 agent_chat"""
+        with self._agent_state_lock:
+            state = dict(self._last_agent_state)
+        if not state:
+            return {"error": "无可恢复的状态", "content": ""}
+        self.reset_cancel()
+        prompt = overrides.pop("prompt", state.get("prompt", ""))
+        history = state.get("messages", [])
+        result = self.agent_chat(
+            prompt,
+            engine=overrides.pop("engine", state.get("engine", "ollama")),
+            model=overrides.pop("model", state.get("model", "")),
+            max_iterations=overrides.pop("max_iterations", 20),
+            **overrides,
+        )
+        return result
+
+    def vision_chat(self, prompt: str, image_paths: List[str],
+                    model: str = "") -> str:
+        """v3.82: 多模态 vision 对话 — 把图片 base64 编码后发给 vision 模型
+
+        Args:
+            prompt: 文本提示
+            image_paths: 本地图片文件路径列表
+            model: 指定模型（留空自动检测 vision 模型）
+
+        Returns:
+            模型回复文本
+        """
+        import base64
+        images_b64 = []
+        for p in image_paths:
+            try:
+                with open(p, "rb") as f:
+                    images_b64.append(base64.b64encode(f.read()).decode("utf-8"))
+            except Exception as e:
+                logger.warning(f"[VisionChat] 读取图片失败 {p}: {e}")
+
+        if not images_b64:
+            logger.info("[VisionChat] 无有效图片，回退普通 chat")
+            return self.chat(prompt, engine=self._active_engine)
+
+        target_model = model
+        if not target_model:
+            vision_keywords = ("vl", "vision", "visual", "qwen2.5-vl", "qwen3-vl",
+                               "llava", "bakllava", "moondream", "minicpm")
+            for eng_name, eng in self._engines.items():
+                cfg = self._configs.get(eng_name)
+                if cfg and cfg.model:
+                    if any(kw in cfg.model.lower() for kw in vision_keywords):
+                        target_model = cfg.model
+                        logger.info(f"[VisionChat] 检测到 vision 模型: {target_model}")
+                        break
+            if not target_model:
+                target_model = self._configs.get(
+                    self._active_engine, EngineConfig(EngineType.OLLAMA)
+                ).model
+
+        engine_name = self._active_engine
+        engine = self._engines.get(engine_name)
+        if not engine:
+            for n, e in self._engines.items():
+                engine = e
+                engine_name = n
+                break
+        if not engine:
+            return ""
+
+        messages = [
+            {"role": "user", "content": prompt, "images": images_b64}
+        ]
+        try:
+            return engine.chat(messages, model=target_model)
+        except Exception as e:
+            logger.warning(f"[VisionChat] engine.chat 失败: {e}")
+            return ""
+
+    def _is_cancelled(self) -> bool:
+        """线程安全地读取取消标志"""
+        with self._cancel_lock:
+            return self._cancel_flag
+
+    def _get_skill_router(self):
+        """获取 SkillRouter 单例（延迟加载，避免循环引用）"""
+        try:
+            import importlib.util
+            import sys as _sys
+            lemon_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            core_dir = os.path.join(lemon_root, "standard_mode", "core")
+            if core_dir not in _sys.path:
+                _sys.path.insert(0, core_dir)
+            from skill_router import get_skill_router
+            return get_skill_router()
+        except Exception as e:
+            logger.debug(f"SkillRouter 加载失败: {e}")
+            return None
+
+    def _get_tool_definitions(self) -> List[Dict]:
+        """从 SkillRouter 获取 OpenAI function calling 格式的工具定义"""
+        router = self._get_skill_router()
+        if router is None:
+            return []
+        try:
+            return router.registry.get_tool_definitions()
+        except Exception as e:
+            logger.debug(f"获取工具定义失败: {e}")
+            return []
+
+    def _assess_completion(self, prompt: str, content: str, tool_calls_made: List[Dict]) -> tuple:
+        """★ P1-1: 完成度评估 — 判断回复是否真正完成了用户任务。
+
+        Returns:
+            (completion_score: float 0.0-1.0, should_continue: bool)
+        """
+        score = 0.5
+        prompt_keywords = set(re.findall(r'\w{3,}', prompt.lower()))
+        content_keywords = set(re.findall(r'\w{3,}', content.lower()))
+        overlap = prompt_keywords & content_keywords
+        if overlap and prompt_keywords:
+            score += 0.2 * min(len(overlap) / max(len(prompt_keywords), 1), 1.0)
+        if tool_calls_made:
+            tool_names = [tc.get('name', '') for tc in tool_calls_made]
+            if any(tn in content for tn in tool_names):
+                score += 0.15
+        if re.search(r'(总结|结论|完成|结果|综上|完成以上|以上是|已完成|成功)', content):
+            score += 0.1
+        score = min(score, 1.0)
+        return score, score < 0.5
+
+    def agent_chat(self, prompt: str, **kwargs) -> Dict[str, Any]:
+        """
+        ★ v3.62: 真正的 Agent 工具调用循环
+        ★ v3.64: 支持 stream_callback 实时输出最终回复 token
+
+        流程：
+        1. 获取所有可用工具定义
+        2. 调用引擎的 generate_with_tools()
+        3. 如果模型返回 tool_calls → 执行对应 skill → 把结果加入上下文 → 回到步骤2
+        4. 如果模型返回纯文本（无 tool_calls）→ 返回最终结果
+        5. 最多循环 _AGENT_MAX_ITERATIONS 次
+
+        Args:
+            prompt: 用户输入
+            engine: 指定引擎（可选，默认使用活动引擎）
+            model: 指定模型（可选）
+            system_prompt: 自定义系统提示词（可选）
+            history: 对话历史（可选）
+            max_iterations: 最大循环次数（可选，默认10）
+            stream_callback: 可选回调 fn(token:str)->None，用于流式输出
+                             仅在最终回复轮（无工具调用）触发
+            confirm_callback: 可选回调 fn(tool_name:str, args:Dict)->bool，高风险工具确认
+                              返回 True=批准执行，False=拒绝
+
+        Returns:
+            Dict with keys:
+                - content: 最终回复文本
+                - engine: 使用的引擎名
+                - model: 使用的模型名
+                - iterations: 总循环次数
+                - tool_calls_made: List[Dict] 执行过的工具调用记录
+                - total_time: 总耗时（秒）
+        """
+        start_time = time.time()
+        engine_name = kwargs.get("engine", self._active_engine)
+        model = kwargs.get("model", "")
+        system_prompt = kwargs.get("system_prompt", self._AGENT_SYSTEM_PROMPT)
+        history = kwargs.get("history", [])
+        max_iterations = kwargs.get("max_iterations", None)
+        complexity_detected = None
+        if max_iterations is None:
+            try:
+                from core.task_classifier import get_task_classifier, TaskComplexity
+                classifier = get_task_classifier()
+                rec = classifier.classify(prompt)
+                complexity_detected = rec.complexity
+                _comp_iters = {
+                    TaskComplexity.SIMPLE: 5,
+                    TaskComplexity.MODERATE: 10,
+                    TaskComplexity.COMPLEX: 15,
+                }
+                max_iterations = _comp_iters.get(rec.complexity, self._AGENT_MAX_ITERATIONS)
+                logger.info(f"[Agent] 任务复杂度={rec.complexity.value}, 迭代上限={max_iterations}")
+            except Exception:
+                max_iterations = self._AGENT_MAX_ITERATIONS
+        engine_selection_reason = "user_specified" if kwargs.get("engine") else "default"
+        if not kwargs.get("engine") and complexity_detected:
+            try:
+                from core.task_classifier import TaskComplexity as _TC
+                if complexity_detected == _TC.COMPLEX and "deepseek" in self._engines:
+                    if engine_name != "deepseek":
+                        logger.info(f"[Agent] COMPLEX任务成本路由: {engine_name} → deepseek")
+                        engine_name = "deepseek"
+                    engine_selection_reason = "classifier=COMPLEX"
+                elif complexity_detected == _TC.SIMPLE and "ollama" in self._engines:
+                    if engine_name != "ollama":
+                        logger.info(f"[Agent] SIMPLE任务成本路由: {engine_name} → ollama")
+                        engine_name = "ollama"
+                    engine_selection_reason = "cost_optimize"
+                else:
+                    engine_selection_reason = f"classifier={complexity_detected.value}"
+            except Exception:
+                pass
+            logger.info(f"[Agent] 引擎选择: {engine_name} 原因={engine_selection_reason}")
+        stream_callback = kwargs.get("stream_callback", None)
+        confirm_callback = kwargs.get("confirm_callback", None)
+        # ★ v3.70: 多模态支持 — 接收图片 base64 列表（Ollama vision 格式）
+        images = kwargs.get("images", [])
+        # ★ v3.81: 子代理模式 — 独立对话历史、共享工具定义
+        is_subagent = kwargs.get("is_subagent", False)
+        parent_context = kwargs.get("parent_context", None)
+        # 标记是否已发射流式开始事件（仅最终回复轮需要触发 onStreamStart）
+        stream_started_emitted = False
+
+        # ★ v3.64: 自动注入 MEMORY.md 持久化记忆到 system_prompt
+        try:
+            from core.memory_manager import get_memory_manager
+            mem_mgr = get_memory_manager()
+            system_prompt = mem_mgr.inject_into_prompt(system_prompt, max_chars=2000)
+        except Exception as e_mem:
+            logger.debug(f"[Agent] 记忆注入失败（忽略）: {e_mem}")
+
+        try:
+            from standard_mode.core.memory_store import get_memory_store
+            mstore = get_memory_store()
+            system_prompt = mstore.inject_into_prompt(system_prompt, prompt, max_chars=1000)
+        except Exception as e_ms:
+            logger.debug(f"[Agent] 向量记忆注入失败（忽略）: {e_ms}")
+
+        # ★ v3.63: 每次启动 agent_chat 时重置取消标志
+        self.reset_cancel()
+
+        # ★ v3.67: 自动初始化引擎（若尚未 initialize）
+        if not self._engines:
+            try:
+                self.initialize()
+                logger.info("[Agent] 自动调用 initialize() 完成")
+            except Exception as e_init:
+                logger.warning(f"[Agent] 自动 initialize() 失败: {e_init}")
+
+        engine = self._engines.get(engine_name)
+        if not engine:
+            # ★ v3.67: 引擎不存在时，尝试 fallback 引擎
+            fallback_engine_name = ""
+            for fb_name in self._fallback_order:
+                if fb_name in self._engines and fb_name != engine_name and not self._is_engine_down(fb_name):
+                    fallback_engine_name = fb_name
+                    break
+            if fallback_engine_name:
+                logger.warning(
+                    f"[Agent] 引擎 {engine_name} 不存在，回退到 {fallback_engine_name}"
+                )
+                engine_name = fallback_engine_name
+                engine = self._engines.get(engine_name)
+            if not engine:
+                return {
+                    "content": f"引擎 {engine_name} 不存在（已尝试 fallback）",
+                    "engine": engine_name,
+                    "model": model,
+                    "iterations": 0,
+                    "tool_calls_made": [],
+                    "total_time": 0,
+                    "error": "engine_not_found",
+                    "complexity_detected": complexity_detected.value if complexity_detected else None,
+                    "timeout_occurred": False,
+                    "validation": None,
+                    "completion_score": 0.0,
+                    "reflections": 0,
+                }
+
+        # 检查引擎是否支持 generate_with_tools
+        if not hasattr(engine, "generate_with_tools"):
+            logger.info(f"[Agent] 引擎 {engine_name} 不支持工具调用，回退到普通 chat")
+            messages = []
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            messages.extend(history)
+            _user_msg = {"role": "user", "content": prompt}
+            if images:
+                _user_msg["images"] = images  # ★ v3.70: 多模态
+            messages.append(_user_msg)
+            content = engine.chat(messages, model=model) if model else engine.chat(messages)
+            return {
+                "content": content,
+                "engine": engine_name,
+                "model": model or self._configs.get(engine_name, EngineConfig(EngineType.OLLAMA)).model,
+                "iterations": 0,
+                "tool_calls_made": [],
+                "total_time": time.time() - start_time,
+                "fallback": True,
+                "complexity_detected": complexity_detected.value if complexity_detected else None,
+                "timeout_occurred": False,
+                "validation": None,
+                "completion_score": 0.0,
+                "reflections": 0,
+            }
+
+        # 获取工具定义
+        tools = self._get_tool_definitions()
+        if not tools:
+            logger.info("[Agent] 无可用工具，回退到普通 chat")
+            messages = []
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            messages.extend(history)
+            _user_msg = {"role": "user", "content": prompt}
+            if images:
+                _user_msg["images"] = images  # ★ v3.70: 多模态
+            messages.append(_user_msg)
+            content = engine.chat(messages, model=model) if model else engine.chat(messages)
+            return {
+                "content": content,
+                "engine": engine_name,
+                "model": model or self._configs.get(engine_name, EngineConfig(EngineType.OLLAMA)).model,
+                "iterations": 0,
+                "tool_calls_made": [],
+                "total_time": time.time() - start_time,
+                "fallback": True,
+                "complexity_detected": complexity_detected.value if complexity_detected else None,
+                "timeout_occurred": False,
+                "validation": None,
+                "completion_score": 0.0,
+                "reflections": 0,
+            }
+
+        logger.info(f"[Agent] 开始工具调用循环，引擎={engine_name}，工具数={len(tools)}")
+
+        # 构建初始消息
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.extend(history)
+        _user_msg = {"role": "user", "content": prompt}
+        if images:
+            _user_msg["images"] = images  # ★ v3.70: 多模态（Ollama vision 格式）
+        messages.append(_user_msg)
+
+        tool_calls_made = []
+        router = self._get_skill_router()
+        # ★ v3.70: 防卡死状态追踪
+        _empty_response_count = 0  # 连续空回复计数
+        _natural_text_only_count = 0  # 连续纯自然语言回复计数（跨轮重置）
+        _tool_call_history = []    # 工具调用历史（检测重复）
+        _stuck_detected = False    # 是否检测到卡死
+        # ★ v3.72: Token 统计 — 估算输入 token（含 system+history+prompt+images）
+        _input_tokens = estimate_messages_tokens(messages)
+        _total_output_tokens = 0  # 累计输出 token（含中间轮次）
+        # ★ v3.81: Context Checkpoint — 每 5 轮保存 + 超限重建
+        _checkpointer = None
+        if not is_subagent:
+            try:
+                from core.context_checkpoint import ContextCheckpointer
+                _checkpointer = ContextCheckpointer()
+            except Exception:
+                pass
+
+        timeout_occurred = False
+        _validation_retried = False
+        _completion_nudge_count = 0
+        _reflection_count = 0
+
+        for iteration in range(max_iterations):
+            iter_start = time.time()
+            if self._is_cancelled():
+                logger.info(f"[Agent] 收到取消请求，于第 {iteration + 1} 轮退出循环")
+                break
+
+            try:
+                self.agent_iteration.emit({
+                    "iteration": iteration + 1,
+                    "engine": engine_name,
+                    "model": model or self._configs.get(engine_name, EngineConfig(EngineType.OLLAMA)).model,
+                    "elapsed": round(time.time() - start_time, 1),
+                    "tool_calls_so_far": len(tool_calls_made),
+                })
+            except Exception:
+                pass
+
+            # ★ v3.81: Context Checkpoint — 自动保存 + 超限重建
+            if _checkpointer and _checkpointer.should_checkpoint(iteration):
+                try:
+                    _checkpointer.save(iteration, messages, tool_calls_made)
+                except Exception:
+                    pass
+            if _checkpointer and _checkpointer.should_rebuild(messages):
+                try:
+                    messages = _checkpointer.rebuild_context(messages, self)
+                except Exception:
+                    pass
+
+            # ★ v3.70: 防卡死检测 — 连续 2 次空回复则退出
+            if _empty_response_count >= 2:
+                logger.warning(f"[Agent] 连续 {_empty_response_count} 次空回复，判定卡死，退出循环")
+                _stuck_detected = True
+                break
+
+            # ★ v3.69: 总上下文长度保护 — 超过阈值时裁剪旧工具结果
+            _MAX_CONTEXT_CHARS = 50000  # 总上下文最多 50000 字符（约 12k token）
+            total_chars = sum(len(m.get("content", "")) for m in messages)
+            if total_chars > _MAX_CONTEXT_CHARS:
+                _trim_old_tool_results(messages, _MAX_CONTEXT_CHARS)
+                logger.info(f"[Agent] 上下文过长({total_chars}字)，已裁剪旧工具结果")
+
+            if self._is_engine_down(engine_name):
+                logger.warning(f"[Agent] 引擎 {engine_name} 已标记 DOWN，尝试故障转移")
+                _failover_to = ""
+                for fb_name in self._fallback_order:
+                    if fb_name in self._engines and fb_name != engine_name and not self._is_engine_down(fb_name):
+                        _failover_to = fb_name
+                        break
+                if _failover_to:
+                    logger.info(f"[Agent] 故障转移: {engine_name} → {_failover_to}")
+                    engine_name = _failover_to
+                    engine = self._engines.get(engine_name)
+                else:
+                    logger.error("[Agent] 无可用引擎，重置健康状态继续")
+                    self.reset_engine_health()
+            # 调用引擎
+            # ★ P1-4: 获取引擎信号量（并发限流）
+            _sem = self._engine_semaphores.get(engine_name)
+            _sem_acquired = False
+            if _sem:
+                _sem_acquired = _sem.acquire(timeout=300)
+                if not _sem_acquired:
+                    logger.warning(f"[Agent] 引擎 {engine_name} 并发已满，等待超时")
+                    timeout_occurred = True
+                    break
+            try:
+                chat_kwargs = {}
+                if model:
+                    chat_kwargs["model"] = model
+                if stream_callback is not None and not stream_started_emitted:
+                    try:
+                        self.message_complete.emit("__stream_start__")
+                    except Exception:
+                        pass
+                    stream_started_emitted = True
+                if stream_callback is not None:
+                    _sent_token_count = [0]
+                    _stream_retry_count = [0]
+                    _MAX_STREAM_RETRIES = 3
+                    def _stream_wrapper(token: str):
+                        _sent_token_count[0] += len(token)
+                        try:
+                            stream_callback(token)
+                        except Exception:
+                            _stream_retry_count[0] += 1
+                            if _stream_retry_count[0] <= _MAX_STREAM_RETRIES:
+                                logger.warning(f"[Agent] 流式回调异常(重试 {_stream_retry_count[0]}/{_MAX_STREAM_RETRIES})")
+                            else:
+                                logger.error("[Agent] 流式回调连续失败，降级为非流式")
+                                raise
+                    chat_kwargs["stream_callback"] = _stream_wrapper
+                print(f"[Agent-DIAG] calling _call_engine_with_tools, engine={engine_name}, "
+                      f"msgs={len(messages)}, tools={len(tools)}, model={chat_kwargs.get('model','')}, "
+                      f"stream={stream_callback is not None}", flush=True)
+                result = self._call_engine_with_tools(
+                    engine, messages, tools, chat_kwargs
+                )
+                self._record_engine_success(engine_name)
+                print(f"[Agent-DIAG] engine returned: content_len={len(result.get('content',''))}, "
+                      f"tool_calls={len(result.get('tool_calls',[]))}", flush=True)
+            except Exception as e:
+                logger.error(f"[Agent] 引擎调用失败: {e}")
+                self._record_engine_failure(engine_name)
+                self._report_telemetry_error(f"引擎调用失败: {e}", {"engine": engine_name})
+                if _sem_acquired and _sem:
+                    _sem.release()
+                    _sem_acquired = False
+                if stream_callback is not None and "stream" in str(e).lower():
+                    logger.info("[Agent] 流式失败，降级为非流式重试")
+                    chat_kwargs.pop("stream_callback", None)
+                    try:
+                        result = self._call_engine_with_tools(engine, messages, tools, chat_kwargs)
+                        self._record_engine_success(engine_name)
+                        content = result.get("content", "")
+                        if content and stream_callback:
+                            try:
+                                stream_callback(content)
+                            except Exception:
+                                pass
+                        return {
+                            "content": content,
+                            "engine": engine_name,
+                            "model": model,
+                            "iterations": iteration,
+                            "tool_calls_made": tool_calls_made,
+                            "total_time": time.time() - start_time,
+                            "stream_degraded": True,
+                            "error": f"stream_degraded: {e}",
+                            "complexity_detected": complexity_detected.value if complexity_detected else None,
+                            "timeout_occurred": False,
+                            "validation": None,
+                            "completion_score": 0.0,
+                            "reflections": _reflection_count,
+                        }
+                    except Exception as e2:
+                        logger.error(f"[Agent] 非流式降级也失败: {e2}")
+                try:
+                    fallback_content = engine.chat(messages, **chat_kwargs)
+                    return {
+                        "content": fallback_content,
+                        "engine": engine_name,
+                        "model": model,
+                        "iterations": iteration,
+                        "tool_calls_made": tool_calls_made,
+                        "total_time": time.time() - start_time,
+                        "error": str(e),
+                        "complexity_detected": complexity_detected.value if complexity_detected else None,
+                        "timeout_occurred": False,
+                        "validation": None,
+                        "completion_score": 0.0,
+                        "reflections": _reflection_count,
+                    }
+                except Exception as e2:
+                    return {
+                        "content": f"引擎调用失败: {e}",
+                        "engine": engine_name,
+                        "model": model,
+                        "iterations": iteration,
+                        "tool_calls_made": tool_calls_made,
+                        "total_time": time.time() - start_time,
+                        "error": str(e2),
+                        "complexity_detected": complexity_detected.value if complexity_detected else None,
+                        "timeout_occurred": False,
+                        "validation": None,
+                        "completion_score": 0.0,
+                        "reflections": _reflection_count,
+                    }
+
+            content = result.get("content", "")
+            tool_calls = result.get("tool_calls", [])
+            if _sem_acquired and _sem:
+                _sem.release()
+                _sem_acquired = False
+
+            # v3.82-F5: normalize hallucinated tool names to registered names
+            if tool_calls and router:
+                _registered = set(router.registry._skills.keys()) if hasattr(router, 'registry') else set()
+                if _registered:
+                    _ALIASES = {
+                        "create_and_run_file": "write_file",
+                        "create_file": "write_file",
+                        "save_file": "write_file",
+                        "write_code": "write_file",
+                        "create_folder": "run_command",
+                        "mkdir": "run_command",
+                        "make_directory": "run_command",
+                        "read_code": "read_file",
+                        "open_file": "read_file",
+                        "execute_command": "run_command",
+                        "shell_exec": "run_command",
+                        "bash": "run_command",
+                        "search": "grep_search",
+                        "find_in_files": "grep_search",
+                        "delete": "delete_file",
+                        "remove_file": "delete_file",
+                    }
+                    for tc in tool_calls:
+                        orig = tc.get("name", "")
+                        if orig not in _registered and orig in _ALIASES:
+                            logger.info(f"[Agent] 工具名映射: {orig} -> {_ALIASES[orig]}")
+                            print(f"[DIAG] tool name alias: {orig} -> {_ALIASES[orig]}", flush=True)
+                            tc["name"] = _ALIASES[orig]
+
+            # v3.72: 累计每轮输出 token
+            if content:
+                _total_output_tokens += estimate_tokens(content)
+
+            # ★ v3.70: 防卡死 — 空回复检测
+            if not content and not tool_calls:
+                _empty_response_count += 1
+                logger.warning(f"[Agent] 第 {iteration+1} 轮返回空内容且无工具调用（连续第{_empty_response_count}次）")
+                if _empty_response_count < 2:
+                    # 第一次空回复：追加提示让模型重新尝试
+                    messages.append({"role": "user", "content": "（请给出有效回复或调用工具继续执行）"})
+                    continue
+                # 第二次空回复：退出循环
+                break
+            else:
+                _empty_response_count = 0  # 重置计数
+
+            # ★ v4.7.17+: 防"创作欲"死循环 —— 小模型常输出自然语言回复
+            # （含代码块/解释）但不调工具。如果连续 2 轮只有 content 无 tool_calls，
+            # 强制退出（防止 CPU 100% 风扇狂转）
+            if content and not tool_calls:
+                _natural_text_only_count += 1
+                if _natural_text_only_count >= 2:
+                    logger.warning(
+                        f"[Agent] 连续 {_natural_text_only_count} 轮只有自然语言回复无工具调用，"
+                        "强制退出（防止 CPU 100% 死循环）"
+                    )
+                    _stuck_detected = True
+                    break
+            else:
+                _natural_text_only_count = 0
+
+            # ★ v3.70: 防偷懒 — 重复工具调用检测
+            if tool_calls:
+                for tc in tool_calls:
+                    call_sig = f"{tc.get('name','')}:{json.dumps(tc.get('arguments',{}), sort_keys=True)}"
+                    _tool_call_history.append(call_sig)
+                    # 检测同一工具+参数是否已调用 3 次以上
+                    if _tool_call_history.count(call_sig) >= 3:
+                        logger.warning(f"[Agent] 工具 {tc.get('name')} 已用相同参数调用 3 次，判定卡死")
+                        _stuck_detected = True
+                        content = f"（检测到重复调用工具 {tc.get('name')}，已自动终止循环。请检查工具参数是否正确。）"
+                        tool_calls = []  # 强制退出
+                        break
+
+            # 如果没有工具调用，返回最终结果
+            if not tool_calls:
+                logger.info(f"[Agent] 循环 {iteration + 1} 轮完成，无更多工具调用")
+
+                # ★ P0-3: ResponseValidator 集成
+                validation_info = None
+                try:
+                    from standard_mode.core.response_validator import (
+                        get_response_validator, ValidationLevel
+                    )
+                    validator = get_response_validator()
+                    vresult = validator.validate(content, prompt)
+                    validation_info = {
+                        "level": vresult.level.value,
+                        "score": vresult.score,
+                        "issues": vresult.issues,
+                        "suggestions": vresult.suggestions,
+                    }
+                    if vresult.level == ValidationLevel.RETRY and not _validation_retried:
+                        _validation_retried = True
+                        messages.append({"role": "user", "content": "请重新生成更完整的回复。"})
+                        continue
+                    elif vresult.level == ValidationLevel.FAIL:
+                        if vresult.fixed_response:
+                            content = vresult.fixed_response
+                    elif vresult.level == ValidationLevel.FALLBACK:
+                        validation_info["needs_manual"] = True
+                except Exception as e_val:
+                    logger.debug(f"[Agent] 验证器异常（不影响返回）: {e_val}")
+
+                # ★ P1-1: 完成度评估
+                completion_score, should_continue = self._assess_completion(
+                    prompt, content, tool_calls_made
+                )
+                if should_continue and _completion_nudge_count < 2:
+                    _completion_nudge_count += 1
+                    messages.append({
+                        "role": "user",
+                        "content": "请确保你已经完成了所有要求的操作，并给出最终总结。",
+                    })
+                    continue
+
+                # ★ P2-2: 保存对话摘要到向量记忆
+                try:
+                    from standard_mode.core.memory_store import get_memory_store
+                    mstore = get_memory_store()
+                    mstore.save_conversation_summary(prompt, content, engine_name)
+                except Exception:
+                    pass
+
+                try:
+                    self.message_complete.emit(content)
+                except Exception:
+                    pass
+                _output_tokens = estimate_tokens(content)
+                _total_output_tokens += _output_tokens
+                _context_tokens = estimate_messages_tokens(messages)
+                _cost = estimate_cost(engine_name, _input_tokens, _total_output_tokens)
+                _elapsed = time.time() - start_time
+                return {
+                    "content": content,
+                    "engine": engine_name,
+                    "model": model or self._configs.get(engine_name, EngineConfig(EngineType.OLLAMA)).model,
+                    "iterations": iteration + 1,
+                    "tool_calls_made": tool_calls_made,
+                    "total_time": _elapsed,
+                    "stuck_detected": _stuck_detected,
+                    "input_tokens": _input_tokens,
+                    "output_tokens": _total_output_tokens,
+                    "context_tokens": _context_tokens,
+                    "cost": _cost,
+                    "token_info": format_token_info(_input_tokens, _total_output_tokens, _context_tokens, _cost, _elapsed),
+                    "complexity_detected": complexity_detected.value if complexity_detected else None,
+                    "timeout_occurred": timeout_occurred,
+                    "validation": validation_info,
+                    "completion_score": completion_score,
+                    "reflections": _reflection_count,
+                }
+
+            # 有工具调用 → 执行每个工具
+            # 先把 assistant 的 tool_call 消息加入上下文（★ v3.89: 兼容 Ollama 原生格式）
+            assistant_msg = self._build_assistant_tool_msg(engine_name, content, tool_calls)
+            messages.append(assistant_msg)
+
+            # 执行每个工具调用
+            for tc in tool_calls:
+                tool_name = tc.get("name", "")
+                tool_args = tc.get("arguments", {})
+                tool_id = tc.get("id", f"call_{len(tool_calls_made)}")
+
+                logger.info(f"[Agent] 调用工具: {tool_name}({json.dumps(tool_args, ensure_ascii=False)[:200]})")
+                # [DIAG] v3.82-F5: tool call diagnostic
+                print(f"[DIAG] agent_chat tool_name={tool_name} args_keys={list(tool_args.keys())} router={'yes' if router else 'None'}", flush=True)
+
+                # v3.82-F5: emit tool_call_starting before execution
+                try:
+                    self.tool_call_starting.emit({"name": tool_name, "arguments": tool_args})
+                except Exception:
+                    pass
+
+                # ★ v3.82: Input schema validation — reject dangerous patterns
+                _validation_error = self._validate_tool_args(tool_name, tool_args)
+                if _validation_error:
+                    tool_result = _validation_error
+                    tool_success = False
+                    logger.warning(f"[Agent] Tool call blocked: {_validation_error}")
+                    tool_calls_made.append({
+                        "iteration": iteration + 1,
+                        "name": tool_name,
+                        "arguments": tool_args,
+                        "result": tool_result,
+                        "success": False,
+                        "rejected": True,
+                    })
+                    if engine_name == "ollama":
+                        messages.append({"role": "tool", "tool_name": tool_name, "content": tool_result})
+                    else:
+                        messages.append({"role": "tool", "tool_call_id": tool_id, "content": tool_result})
+                    continue
+
+                # ★ Req11: dry-run 模式 — 只预览不执行写操作
+                if self._dry_run_mode and tool_name in ("write_file", "edit_file", "multi_edit", "delete_file", "run_command"):
+                    tool_result = f"[DRY RUN] {tool_name} would be called with: {json.dumps(tool_args, ensure_ascii=False)[:300]}"
+                    tool_success = True
+                    tool_calls_made.append({
+                        "iteration": iteration + 1,
+                        "name": tool_name,
+                        "arguments": tool_args,
+                        "result": tool_result,
+                        "success": True,
+                        "dry_run": True,
+                    })
+                    if engine_name == "ollama":
+                        messages.append({"role": "tool", "tool_name": tool_name, "content": tool_result})
+                    else:
+                        messages.append({"role": "tool", "tool_call_id": tool_id, "content": tool_result})
+                    continue
+
+                # ★ v3.81: 高风险工具确认门控
+                if confirm_callback is not None:
+                    try:
+                        approved = confirm_callback(tool_name, tool_args)
+                    except Exception as _e_cc:
+                        logger.warning(f"[Agent] confirm_callback 异常（默认允许）: {_e_cc}")
+                        approved = True
+                    if not approved:
+                        tool_result = "用户拒绝执行此操作"
+                        tool_success = False
+                        logger.info(f"[Agent] 用户拒绝工具 {tool_name}")
+                        tool_calls_made.append({
+                            "iteration": iteration + 1,
+                            "name": tool_name,
+                            "arguments": tool_args,
+                            "result": tool_result,
+                            "success": False,
+                            "rejected": True,
+                        })
+                        try:
+                            self.tool_call_made.emit({
+                                "name": tool_name,
+                                "arguments": tool_args,
+                                "result": tool_result,
+                                "success": False,
+                                "rejected": True,
+                            })
+                        except Exception:
+                            pass
+                        if engine_name == "ollama":
+                            messages.append({
+                                "role": "tool",
+                                "tool_name": tool_name,
+                                "content": tool_result,
+                            })
+                        else:
+                            messages.append({
+                                "role": "tool",
+                                "tool_call_id": tool_id,
+                                "content": tool_result,
+                            })
+                        continue
+
+                # ★ v3.69: 工具调用重试逻辑 — 瞬时失败自动重试 1 次
+                tool_result = ""
+                tool_success = False
+                _tool_start = time.time()
+                if router:
+                    _dyn_timeout = self.get_dynamic_tool_timeout(tool_name, self._TOOL_TIMEOUT_SECONDS)
+                    sr = _invoke_tool_with_timeout(
+                        router, tool_name, tool_args, _dyn_timeout
+                    )
+                    tool_result = sr.output if sr.success else f"错误: {sr.error}"
+                    tool_success = sr.success
+
+                    # ★ 重试：仅在失败且错误看起来是瞬时性的时候
+                    if not tool_success and _is_transient_error(sr.error):
+                        logger.warning(f"[Agent] 工具 {tool_name} 失败(瞬时错误)，500ms 后重试: {sr.error[:100]}")
+                        time.sleep(0.5)
+                        sr = _invoke_tool_with_timeout(
+                            router, tool_name, tool_args, _dyn_timeout
+                        )
+                        tool_result = sr.output if sr.success else f"错误: {sr.error}"
+                        tool_success = sr.success
+                        if tool_success:
+                            logger.info(f"[Agent] 工具 {tool_name} 重试成功")
+                    # ★ P1-2: 失败反思 — 工具失败后注入反思 prompt
+                    if not tool_success:
+                        _reflection_count += 1
+                        tool_result = (
+                            f"工具 {tool_name} 执行失败：{tool_result}\n"
+                            f"请分析失败原因，考虑：\n"
+                            f"1. 参数是否正确？\n"
+                            f"2. 是否需要使用其他工具？\n"
+                            f"3. 是否需要用户提供更多信息？\n"
+                            f"然后决定下一步操作。"
+                        )
+                else:
+                    tool_result = "SkillRouter 不可用"
+                    tool_success = False
+                _tool_elapsed = time.time() - _tool_start
+                self._record_tool_call(tool_name, _tool_elapsed, tool_success)
+
+                tool_calls_made.append({
+                    "iteration": iteration + 1,
+                    "name": tool_name,
+                    "arguments": tool_args,
+                    "result": tool_result[:500],
+                    "success": tool_success,
+                })
+
+                if tool_success and tool_name in ("write_file", "edit_file", "multi_edit"):
+                    self._auto_git_checkpoint(tool_name, tool_args)
+
+                # 发射工具调用信号
+                try:
+                    self.tool_call_made.emit({
+                        "name": tool_name,
+                        "arguments": tool_args,
+                        "result": tool_result[:500],
+                        "success": tool_success,
+                    })
+                except Exception:
+                    pass
+
+                # 把工具结果加入消息上下文
+                # ★ v3.69: Token 保护 — 截断过长工具结果，防止上下文窗口溢出
+                _MAX_TOOL_RESULT_CHARS = 4000  # 单个工具结果最多 4000 字符
+                if len(tool_result) > _MAX_TOOL_RESULT_CHARS:
+                    tool_result_for_ctx = (
+                        tool_result[:_MAX_TOOL_RESULT_CHARS]
+                        + f"\n\n...(结果已截断，原始长度 {len(tool_result)} 字符)"
+                    )
+                    logger.info(f"[Agent] 工具结果过长({len(tool_result)}字)，已截断至 {_MAX_TOOL_RESULT_CHARS} 字")
+                else:
+                    tool_result_for_ctx = tool_result
+                # ★ v3.89: Ollama 原生 tool 消息用 tool_name 关联；其他引擎用 tool_call_id
+                if engine_name == "ollama":
+                    messages.append({
+                        "role": "tool",
+                        "tool_name": tool_name,
+                        "content": tool_result_for_ctx,
+                    })
+                else:
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tool_id,
+                        "content": tool_result_for_ctx,
+                    })
+
+            # ★ P0-2: 步骤级超时检查
+            iter_elapsed = time.time() - iter_start
+            if iter_elapsed > self._ITERATION_TIMEOUT_SECONDS:
+                logger.warning(f"[Agent] 第 {iteration+1} 轮超时 ({iter_elapsed:.1f}s)，跳过")
+                timeout_occurred = True
+                break
+
+            # 继续下一轮循环，让模型处理工具结果
+
+        # 循环退出：可能是被取消、卡死、或达到最大循环次数
+        # ★ v3.72: 统一计算 token 统计
+        _ctx_tokens = estimate_messages_tokens(messages)
+        _elapsed_final = time.time() - start_time
+        _cost_final = estimate_cost(engine_name, _input_tokens, _total_output_tokens)
+
+        if self._is_cancelled():
+            logger.info(f"[Agent] 已取消，返回已积累结果（{len(tool_calls_made)} 次工具调用）")
+            # ★ v3.81: 保存恢复点
+            with self._agent_state_lock:
+                self._last_agent_state = {
+                    "prompt": prompt, "messages": messages,
+                    "tool_calls_made": tool_calls_made,
+                    "iterations": iteration + 1 if 'iteration' in locals() else 0,
+                    "engine": engine_name, "model": model,
+                }
+            final_content = content if content else "(Agent 已取消)"
+            return {
+                "content": final_content,
+                "engine": engine_name,
+                "model": model or self._configs.get(engine_name, EngineConfig(EngineType.OLLAMA)).model,
+                "iterations": iteration + 1 if 'iteration' in locals() else 0,
+                "tool_calls_made": tool_calls_made,
+                "total_time": _elapsed_final,
+                "cancelled": True,
+                "input_tokens": _input_tokens,
+                "output_tokens": _total_output_tokens,
+                "context_tokens": _ctx_tokens,
+                "cost": _cost_final,
+                "token_info": format_token_info(_input_tokens, _total_output_tokens, _ctx_tokens, _cost_final, _elapsed_final),
+                "complexity_detected": complexity_detected.value if complexity_detected else None,
+                "timeout_occurred": timeout_occurred,
+                "validation": None,
+                "completion_score": 0.0,
+                "reflections": _reflection_count,
+            }
+
+        # ★ v3.70: 卡死退出
+        if _stuck_detected:
+            logger.warning(f"[Agent] 检测到卡死，返回已积累结果（{len(tool_calls_made)} 次工具调用）")
+            final_content = content if content else "(Agent 检测到卡死：连续空回复或重复工具调用，已自动终止)"
+            return {
+                "content": final_content,
+                "engine": engine_name,
+                "model": model or self._configs.get(engine_name, EngineConfig(EngineType.OLLAMA)).model,
+                "iterations": iteration + 1 if 'iteration' in locals() else 0,
+                "tool_calls_made": tool_calls_made,
+                "total_time": _elapsed_final,
+                "stuck_detected": True,
+                "input_tokens": _input_tokens,
+                "output_tokens": _total_output_tokens,
+                "context_tokens": _ctx_tokens,
+                "cost": _cost_final,
+                "token_info": format_token_info(_input_tokens, _total_output_tokens, _ctx_tokens, _cost_final, _elapsed_final),
+                "complexity_detected": complexity_detected.value if complexity_detected else None,
+                "timeout_occurred": timeout_occurred,
+                "validation": None,
+                "completion_score": 0.0,
+                "reflections": _reflection_count,
+            }
+
+        # 达到最大循环次数
+        # ★ v3.81: Goal Judge — 判断目标是否已达成
+        _goal_achieved = None
+        _goal_reason = ""
+        if not is_subagent and content:
+            try:
+                from core.goal_judge import GoalJudge
+                judge = GoalJudge(self)
+                _judge_result = judge.judge(prompt, content, tool_calls_made)
+                _goal_achieved = _judge_result.get("achieved")
+                _goal_reason = _judge_result.get("reason", "")
+                logger.info(f"[GoalJudge] achieved={_goal_achieved}, reason={_goal_reason}")
+            except Exception as e:
+                logger.warning(f"[GoalJudge] 异常: {e}")
+
+        logger.warning(f"[Agent] 达到最大循环次数 {max_iterations}")
+        final_content = content if content else "(Agent 达到最大循环次数，未能生成最终回复)"
+        return {
+            "content": final_content,
+            "engine": engine_name,
+            "model": model or self._configs.get(engine_name, EngineConfig(EngineType.OLLAMA)).model,
+            "iterations": max_iterations,
+            "tool_calls_made": tool_calls_made,
+            "total_time": _elapsed_final,
+            "max_iterations_reached": True,
+            "goal_achieved": _goal_achieved,
+            "goal_reason": _goal_reason,
+            "input_tokens": _input_tokens,
+            "output_tokens": _total_output_tokens,
+            "context_tokens": _ctx_tokens,
+            "cost": _cost_final,
+            "token_info": format_token_info(_input_tokens, _total_output_tokens, _ctx_tokens, _cost_final, _elapsed_final),
+            "complexity_detected": complexity_detected.value if complexity_detected else None,
+            "timeout_occurred": timeout_occurred,
+            "validation": None,
+            "completion_score": 0.0,
+            "reflections": _reflection_count,
+        }
+
+    # ==================== v3.67: 引擎接口兼容层 ====================
+
+    def _build_assistant_tool_msg(self, engine_name: str, content: str,
+                                  tool_calls: List[Dict]) -> Dict[str, Any]:
+        """
+        ★ v3.89: 构造回传给模型的 assistant tool_calls 消息，兼容不同引擎格式。
+
+        Ollama 原生 /api/chat 要求（否则 400 "can't find closing }"）：
+            - arguments 必须为【对象】（不是字符串）
+            - function 内需带 index
+            - 不接受 id 字段
+        其他引擎（OpenAI 兼容 / DeepSeek / MIMO）用标准 OpenAI 格式：
+            - id + type + function{name, arguments(json字符串)}
+        """
+        if not tool_calls:
+            return {"role": "assistant", "content": content}
+
+        if engine_name == "ollama":
+            ollama_calls = []
+            for i, tc in enumerate(tool_calls):
+                args = tc.get("arguments", {})
+                if isinstance(args, str):
+                    try:
+                        args = json.loads(args) if args else {}
+                    except json.JSONDecodeError:
+                        args = {"_raw": args}
+                ollama_calls.append({
+                    "type": "function",
+                    "function": {
+                        "index": i,
+                        "name": tc.get("name", ""),
+                        "arguments": args,  # 必须对象
+                    }
+                })
+            return {
+                "role": "assistant",
+                "content": content or "",
+                "tool_calls": ollama_calls,
+            }
+
+        # OpenAI 兼容格式
+        openai_calls = [
+            {
+                "id": tc.get("id", f"call_{i}"),
+                "type": "function",
+                "function": {
+                    "name": tc.get("name", ""),
+                    "arguments": json.dumps(tc.get("arguments", {}), ensure_ascii=False),
+                }
+            }
+            for i, tc in enumerate(tool_calls)
+        ]
+        return {
+            "role": "assistant",
+            "content": content or "",
+            "tool_calls": openai_calls,
+        }
+
+    def _call_engine_with_tools(self, engine, messages: List[Dict],
+                                  tools: List[Dict],
+                                  chat_kwargs: Dict) -> Dict[str, Any]:
+        import inspect as _inspect
+
+        _MAX_RETRIES = 3
+        _RETRY_DELAYS = [2, 5, 10]
+        last_err = None
+
+        for attempt in range(_MAX_RETRIES + 1):
+            try:
+                return self._call_engine_with_tools_inner(engine, messages, tools, chat_kwargs)
+            except Exception as e:
+                err_str = str(e).lower()
+                is_retryable = any(kw in err_str for kw in [
+                    '429', 'rate', 'quota', 'overloaded', '502', '503', 'timeout', 'timed out',
+                    'connectionerror', 'connection refused',
+                ])
+                if not is_retryable or attempt >= _MAX_RETRIES:
+                    raise
+                delay = _RETRY_DELAYS[min(attempt, len(_RETRY_DELAYS) - 1)]
+                logger.warning(f"[Agent] LLM call failed (attempt {attempt+1}/{_MAX_RETRIES+1}), "
+                               f"retrying in {delay}s: {e}")
+                try:
+                    self.agent_iteration.emit({
+                        "iteration": -1,
+                        "engine": "retry",
+                        "model": str(e)[:80],
+                        "elapsed": delay,
+                        "tool_calls_so_far": attempt + 1,
+                    })
+                except Exception:
+                    pass
+                time.sleep(delay)
+                last_err = e
+
+        raise last_err
+
+    def _call_engine_with_tools_inner(self, engine, messages: List[Dict],
+                                       tools: List[Dict],
+                                       chat_kwargs: Dict) -> Dict[str, Any]:
+        """
+        ★ v3.67: 引擎接口兼容层
+        ================================
+        统一处理不同引擎的 generate_with_tools 接口差异：
+
+        1. 检测引擎签名：
+           - 新签名 (messages, tools, *, model, stream_callback) → 直接调用
+           - 旧签名 (prompt: str, tools, context) → 转换 messages→prompt+context
+        2. 统一返回值为 dict:
+           - {"content": str, "tool_calls": List[Dict], "model": str}
+        3. 兼容字符串返回值（旧引擎返回 JSON 字符串或纯文本）
+
+        Args:
+            engine: 引擎实例
+            messages: 消息列表（agent_chat 构建好的完整上下文）
+            tools: 工具定义列表
+            chat_kwargs: 额外参数（model / stream_callback）
+
+        Returns:
+            Dict with keys: content, tool_calls, model
+        """
+        import inspect as _inspect
+
+        method = getattr(engine, "generate_with_tools", None)
+        if method is None:
+            # 引擎不支持工具调用 → 用普通 chat
+            logger.info(f"[Agent] 引擎 {type(engine).__name__} 无 generate_with_tools，回退 chat")
+            content = engine.chat(messages, **chat_kwargs)
+            return {
+                "content": content if isinstance(content, str) else str(content),
+                "tool_calls": [],
+                "model": chat_kwargs.get("model", ""),
+            }
+
+        # 检测签名
+        try:
+            sig = _inspect.signature(method)
+            params = list(sig.parameters.keys())
+        except (ValueError, TypeError):
+            params = []
+
+        # 提取 prompt + context（旧签名需要）
+        # messages 结构: [system, ...history, user]
+        # 把最后一个 user 消息作为 prompt，前面的作为 context
+        prompt_str = ""
+        context_list = []
+        if messages:
+            # 找最后一个 user 消息作为 prompt
+            last_user_idx = -1
+            for i in range(len(messages) - 1, -1, -1):
+                if messages[i].get("role") == "user":
+                    last_user_idx = i
+                    break
+            if last_user_idx >= 0:
+                prompt_str = messages[last_user_idx].get("content", "")
+                context_list = messages[:last_user_idx]
+            else:
+                # 没有 user 消息，用最后一条作为 prompt
+                prompt_str = messages[-1].get("content", "")
+                context_list = messages[:-1]
+
+        # 提取兼容参数
+        model_val = chat_kwargs.get("model", "")
+        stream_cb = chat_kwargs.get("stream_callback", None)
+
+        result_val = None
+        try:
+            if "prompt" in params and "messages" not in params:
+                # 旧签名: generate_with_tools(prompt: str, tools, context=None) -> str
+                logger.debug(f"[Agent] 调用旧签名 generate_with_tools(prompt, tools, context)")
+                call_args = {"prompt": prompt_str, "tools": tools}
+                if "context" in params:
+                    call_args["context"] = context_list
+                # 旧引擎不支持 model/stream_callback，忽略这些 kwargs
+                result_val = method(**call_args)
+            else:
+                logger.debug(f"[Agent] 调用新签名 generate_with_tools(messages, tools, **kwargs)")
+                call_args = {"messages": messages, "tools": tools}
+                if "model" in params and model_val:
+                    call_args["model"] = model_val
+                if "stream_callback" in params and stream_cb is not None:
+                    call_args["stream_callback"] = stream_cb
+                print(f"[Agent-DIAG] generate_with_tools({type(engine).__name__}), args={list(call_args.keys())}", flush=True)
+                result_val = method(**call_args)
+                print(f"[Agent-DIAG] generate_with_tools returned: {type(result_val).__name__}", flush=True)
+        except TypeError as te:
+            # 签名匹配失败 → 尝试最简调用
+            logger.warning(f"[Agent] generate_with_tools 签名匹配失败: {te}，尝试最简调用")
+            try:
+                result_val = method(prompt_str, tools)
+            except Exception as e2:
+                logger.error(f"[Agent] 最简调用也失败: {e2}")
+                raise
+
+        # 统一返回值为 dict
+        return self._normalize_engine_result(result_val, model_val)
+
+    def _normalize_engine_result(self, result_val, model_val: str = "") -> Dict[str, Any]:
+        """
+        ★ v3.67: 将引擎返回值统一为 dict 格式
+
+        支持的输入格式：
+        - dict: {"content": str, "tool_calls": list} → 直接返回
+        - dict: {"tool_calls": list} (无 content) → content=""
+        - str: JSON 字符串 '{"tool_calls": [...]}' → 解析
+        - str: 纯文本 → {"content": str, "tool_calls": []}
+        - 其他 → str(result_val) 作为 content
+        """
+        if isinstance(result_val, dict):
+            content = result_val.get("content", "")
+            tool_calls = result_val.get("tool_calls", [])
+            # 标准化 tool_calls 格式: [{"name": str, "arguments": dict, "id": str}]
+            normalized_tcs = []
+            for tc in tool_calls:
+                if isinstance(tc, dict):
+                    # OpenAI 格式: {"id": "...", "function": {"name": "...", "arguments": "..."}}
+                    if "function" in tc:
+                        func = tc["function"]
+                        args_str = func.get("arguments", "{}")
+                        if isinstance(args_str, str):
+                            try:
+                                args_dict = json.loads(args_str) if args_str else {}
+                            except json.JSONDecodeError:
+                                args_dict = {"_raw": args_str}
+                        else:
+                            args_dict = args_str
+                        normalized_tcs.append({
+                            "id": tc.get("id", f"call_{len(normalized_tcs)}"),
+                            "name": func.get("name", ""),
+                            "arguments": args_dict,
+                        })
+                    # 已标准化格式: {"name": str, "arguments": dict}
+                    elif "name" in tc:
+                        args = tc.get("arguments", {})
+                        if isinstance(args, str):
+                            try:
+                                args = json.loads(args) if args else {}
+                            except json.JSONDecodeError:
+                                args = {"_raw": args}
+                        normalized_tcs.append({
+                            "id": tc.get("id", f"call_{len(normalized_tcs)}"),
+                            "name": tc["name"],
+                            "arguments": args,
+                        })
+                    else:
+                        logger.warning(f"[Agent] 无法识别的 tool_call 格式: {tc}")
+            return {
+                "content": content or "",
+                "tool_calls": normalized_tcs,
+                "model": model_val,
+            }
+
+        if isinstance(result_val, str):
+            # 尝试解析为 JSON（旧引擎返回 '{"tool_calls": [...]}'
+            stripped = result_val.strip()
+            if stripped.startswith("{") and "tool_calls" in stripped:
+                try:
+                    parsed = json.loads(stripped)
+                    return self._normalize_engine_result(parsed, model_val)
+                except json.JSONDecodeError:
+                    pass
+            # 纯文本回复
+            return {
+                "content": result_val,
+                "tool_calls": [],
+                "model": model_val,
+            }
+
+        # 其他类型 → 转字符串
+        return {
+            "content": str(result_val),
+            "tool_calls": [],
+            "model": model_val,
+        }
+
+    # ==================== v3.52: Agent 角色系统 ====================
+    
+    def chat_with_role(self, prompt: str, role: str = "assistant", **kwargs) -> ChatResponse:
+        """★ v3.52: 使用角色进行对话"""
+        role_config = AGENT_ROLES.get(role, AGENT_ROLES["assistant"])
+        kwargs["role"] = role
+        kwargs["think"] = role_config.get("think", False)
+        kwargs["temperature"] = role_config.get("temperature", 0.7)
+        return self.chat(prompt, **kwargs)
+    
+    # ==================== v3.52: Skills 预处理 ====================
+    
+    def _apply_skills(self, prompt: str, kwargs: dict) -> str:
+        """★ v3.52: 应用 Skills 增强 prompt"""
+        try:
+            import importlib.util, os as _os
+            _lemon_root = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+            skill_path = _os.path.join(_lemon_root, "standard_mode", "core", "skill_router.py")
+            if not _os.path.exists(skill_path):
+                return prompt
+            
+            spec = importlib.util.spec_from_file_location("skill_router", skill_path)
+            skill_mod = importlib.util.module_from_spec(spec)
+            # 注入依赖路径
+            import sys as _sys
+            _std_root = _os.path.join(_lemon_root, "standard_mode")
+            if _std_root not in _sys.path:
+                _sys.path.insert(0, _std_root)
+            spec.loader.exec_module(skill_mod)
+            
+            if hasattr(skill_mod, "get_skill_router"):
+                router = skill_mod.get_skill_router()
+                result = router.invoke(prompt, context=kwargs.get("context", {}))
+                if result and result.get("enhanced_prompt"):
+                    logger.info(f"[Skills] 使用增强 prompt: {result.get('skill_name', 'unknown')}")
+                    return result["enhanced_prompt"]
+                
+                skills_list = router.list_skills()
+                if skills_list:
+                    skills_desc = ", ".join([s.get("name", "") for s in skills_list[:5]])
+                    prompt = f"[可用工具: {skills_desc}]\n\n{prompt}"
+        except Exception as e:
+            logger.debug(f"Skills 处理失败（非致命）: {e}")
+        
+        return prompt
+    
+    # ==================== v3.52: 对话上下文优化 ====================
+    
+    def _compress_history(self, history: List[Dict]) -> List[Dict]:
+        """★ v3.52: 压缩对话历史，保留最近5轮 + 摘要"""
+        if len(history) <= 10:
+            return history
+        
+        # 保留最近10条（5轮对话）
+        recent = history[-10:]
+        
+        # 生成旧内容的摘要
+        old_history = history[:-10]
+        summary = self._summarize_context(old_history)
+        
+        # 在开头添加摘要
+        compressed = [{"role": "system", "content": f"之前的对话摘要：{summary}"}]
+        compressed.extend(recent)
+        
+        return compressed
+    
+    def _summarize_context(self, history: List[Dict]) -> str:
+        """★ v3.52: 生成对话上下文摘要"""
+        topics = []
+        for msg in history:
+            if msg.get("role") == "user":
+                content = msg.get("content", "")[:50]
+                topics.append(content)
+        
+        return "、".join(topics[-3:]) if topics else "无"
+    
+    def get_available_engines(self) -> List[str]:
+        """获取可用引擎列表"""
+        return [name for name, engine in self._engines.items() 
+                if engine.is_available()]
+
+    def get_engine_adapters(self) -> List[Any]:
+        """
+        ★ P2 引擎无关化：返回全部主通道引擎适配器（BaseEngineAdapter 实例）。
+        供上层（SmartDispatcher.from_engine_provider 等）构建引擎无关调度/桥接。
+        """
+        return list(self._engines.values())
+    
+    def get_engine(self, engine_name: str) -> Any:
+        """
+        ★ P2 引擎无关化：按名返回引擎适配器（BaseEngineAdapter 实例）。
+        供 SmartDispatcher.from_engine_provider / CrossEngineBridge 等鸭子类型使用。
+        """
+        return self._engines.get(engine_name)
+
+    def get_models(self, engine_name: str) -> List[str]:
+        """获取指定引擎的模型列表"""
+        engine = self._engines.get(engine_name)
+        if engine:
+            return engine.list_models()
+        return []
+    
+    def get_status(self) -> Dict[str, Any]:
+        """获取引擎状态"""
+        status = {}
+        for name, engine in self._engines.items():
+            status[name] = {
+                "available": engine.is_available(),
+                "model": self._configs[name].model,
+                "is_active": (name == self._active_engine)
+            }
+        return status
+
+    def _auto_git_checkpoint(self, tool_name: str, tool_args: dict):
+        try:
+            import subprocess
+            fp = tool_args.get("file_path", tool_args.get("path", ""))
+            desc = fp if fp else tool_name
+            subprocess.run(["git", "add", "-A"], capture_output=True, timeout=5)
+            result = subprocess.run(
+                ["git", "commit", "--allow-empty", "-m", f"[LemonCode] {tool_name}: {desc}"],
+                capture_output=True, timeout=5,
+            )
+            if result.returncode == 0:
+                logger.info(f"[Git] Checkpoint: {tool_name} {desc}")
+        except FileNotFoundError:
+            pass
+        except Exception as e:
+            logger.debug(f"[Git] Checkpoint skipped: {e}")
+
+    def git_rollback(self, n_commits: int = 1) -> Dict[str, Any]:
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["git", "log", f"-{n_commits + 1}", "--pretty=format:%H"],
+                capture_output=True, timeout=5,
+            )
+            hashes = result.stdout.decode().strip().splitlines()
+            if len(hashes) < 2:
+                return {"success": False, "message": "No commits to rollback"}
+            target = hashes[-1]
+            subprocess.run(["git", "reset", "--hard", target], capture_output=True, timeout=10)
+            logger.info(f"[Git] Rolled back {n_commits} commits to {target[:8]}")
+            return {"success": True, "message": f"Rolled back to {target[:8]}"}
+        except FileNotFoundError:
+            return {"success": False, "message": "git not found"}
+        except Exception as e:
+            return {"success": False, "message": str(e)}
+
+    # ★ v4.1.14: 给前端拿当前真实活动引擎 + 模型（替代占位符 mimo-auto）
+    def get_current_model(self) -> Dict[str, str]:
+        """返回 {engine, model, display}
+        - engine: 活动引擎名 (mimocode / ollama / deepseek / acp)
+        - model: 该引擎当前配置的模型 id
+        - display: 给 UI 显示的友好名（截断过长 id，去掉 :latest 后缀等）
+        """
+        engine = self._active_engine
+        model = self._configs.get(engine).model if engine in self._configs else ""
+        # 真实拿不到时（model 为空或占位符 "auto"），尝试 fallback 顺序第一个可用引擎
+        if not model or model == "auto":
+            for fallback in self._fallback_order:
+                cfg = self._configs.get(fallback)
+                if cfg and cfg.model and cfg.model != "auto":
+                    engine = fallback
+                    model = cfg.model
+                    break
+        # display 加工：去掉 ollama 模型的 :latest，截断过长名
+        display = model or "auto"
+        if display.endswith(":latest"):
+            display = display[:-7]
+        if engine == "deepseek" and "(测试)" not in display:
+            display = display + "(测试)"
+        if len(display) > 30:
+            display = display[:27] + "..."
+        return {"engine": engine, "model": model, "display": display}
+    
+    # ==================== 缓存管理 ====================
+    
+    def _cache_key(self, prompt: str, engine_name: str, model: str) -> str:
+        """生成缓存键"""
+        return f"{engine_name}:{model}:{prompt[:200]}"
+    
+    def _get_cached(self, prompt: str, engine_name: str, model: str) -> Optional[ChatResponse]:
+        """从缓存中获取响应"""
+        key = self._cache_key(prompt, engine_name, model)
+        with self._cache_lock:
+            if key in self._cache:
+                entry = self._cache[key]
+                if time.time() - entry['timestamp'] < self._CACHE_TTL_SECONDS:
+                    # 移到末尾（LRU）
+                    self._cache.move_to_end(key)
+                    return entry['response']
+                else:
+                    del self._cache[key]
+        return None
+    
+    def _set_cached(self, prompt: str, engine_name: str, model: str, response: ChatResponse):
+        """将响应存入缓存"""
+        key = self._cache_key(prompt, engine_name, model)
+        with self._cache_lock:
+            # 无论key是否存在，都更新值和timestamp
+            self._cache[key] = {
+                'response': response,
+                'timestamp': time.time(),
+            }
+            # 移到末尾（最新使用）
+            self._cache.move_to_end(key)
+            # LRU 淘汰：超过最大容量时移除最旧的
+            while len(self._cache) > self._CACHE_MAX_SIZE:
+                self._cache.popitem(last=False)
+    
+    def clear_cache(self):
+        """清空响应缓存"""
+        with self._cache_lock:
+            self._cache.clear()
+    
+    # ==================== 历史管理 ====================
+    
+    def add_to_history(self, session_id: str, role: str, content: str):
+        """添加消息到历史（自动截断）"""
+        with self._lock:
+            if session_id not in self._history:
+                self._history[session_id] = []
+            history = self._history[session_id]
+            history.append({"role": role, "content": content})
+            # 截断超长历史
+            if len(history) > self._HISTORY_MAX_PER_SESSION:
+                self._history[session_id] = history[-self._max_history:]
+    
+    def clear_history(self, session_id: str = None):
+        """清空对话历史"""
+        with self._lock:
+            if session_id:
+                self._history.pop(session_id, None)
+            else:
+                self._history.clear()
+    
+    def get_history(self, session_id: str) -> List[Dict]:
+        """获取会话历史"""
+        with self._lock:
+            return list(self._history.get(session_id, []))
+    
+    def trim_history(self):
+        """清理所有会话中过长的历史记录"""
+        with self._lock:
+            for sid in list(self._history.keys()):
+                if len(self._history[sid]) > self._max_history:
+                    self._history[sid] = self._history[sid][-self._max_history:]
+    
+    # ==================== 资源管理 ====================
+    
+    def register_status_callback(self, callback: Callable):
+        """注册状态变更回调（使用弱引用避免循环引用）"""
+        self._status_callbacks.append(weakref.ref(callback))
+    
+    def _notify_status_change(self):
+        """通知状态变更（自动清理已失效的弱引用）"""
+        dead_refs = []
+        for ref in self._status_callbacks:
+            cb = ref()
+            if cb is not None:
+                try:
+                    cb()
+                except Exception:
+                    pass
+            else:
+                dead_refs.append(ref)
+        for ref in dead_refs:
+            self._status_callbacks.remove(ref)
+    
+    def _get_telemetry(self):
+        """★ P2-1: 延迟获取遥测报告器单例"""
+        if self._telemetry is None:
+            try:
+                from standard_mode.core.telemetry import get_telemetry_reporter
+                self._telemetry = get_telemetry_reporter()
+            except Exception:
+                self._telemetry = None
+        return self._telemetry
+
+    def _report_telemetry_error(self, error_msg: str, context: Optional[Dict] = None):
+        """★ P2-1: 向遥测系统报告错误（失败静默降级）"""
+        try:
+            tel = self._get_telemetry()
+            if tel:
+                tel.report_error({"error": error_msg, **(context or {})})
+        except Exception:
+            pass
+
+    def cleanup(self):
+        """清理所有资源（释放内存）"""
+        with self._lock:
+            self._history.clear()
+        with self._cache_lock:
+            self._cache.clear()
+        self._status_callbacks.clear()
+        # 清理引擎引用
+        for engine in self._engines.values():
+            if hasattr(engine, 'cleanup'):
+                try:
+                    engine.cleanup()
+                except Exception:
+                    pass
+        self._engines.clear()
+    
+    # ==================== ★ 新增：引擎健康检查方法 ====================
+    
+    def _check_engines_health(self, monitor: HealthMonitor):
+        for name in list(self._engines.keys()):
+            engine = self._engines.get(name)
+            if not engine:
+                continue
+            try:
+                is_avail = engine.is_available()
+                monitor.update_availability(name, is_avail)
+            except Exception as e:
+                logger.warning(f"健康检查 {name} 异常: {e}")
+                monitor.update_availability(name, False)
+    
+    def get_health_summary(self) -> Dict[str, Any]:
+        """获取所有引擎的健康摘要"""
+        return self._health_monitor.get_health_summary()
+    
+    def get_engine_health(self, engine_name: str) -> Optional[EngineHealth]:
+        """获取指定引擎的健康状态"""
+        return self._health_monitor.get_health(engine_name)
+    
+    # ==================== ★ 新增：性能统计方法 ====================
+    
+    def _record_perf(self, engine_name: str, response_time: float):
+        """记录性能统计"""
+        with self._lock:
+            stats = self._perf_stats[engine_name]
+            stats["total_requests"] += 1
+            stats["total_time"] += response_time
+            stats["last_request_time"] = response_time
+            if response_time < stats["min_time"]:
+                stats["min_time"] = response_time
+            if response_time > stats["max_time"]:
+                stats["max_time"] = response_time
+    
+    def get_perf_stats(self) -> Dict[str, Dict[str, Any]]:
+        """获取所有引擎的性能统计"""
+        with self._lock:
+            result = {}
+            for eng_name, raw in self._perf_stats.items():
+                stats = dict(raw)
+                if stats["total_requests"] > 0:
+                    stats["avg_time"] = round(stats["total_time"] / stats["total_requests"], 3)
+                else:
+                    stats["avg_time"] = 0.0
+                if stats["min_time"] == float('inf'):
+                    stats["min_time"] = 0.0
+                result[eng_name] = stats
+            return result
+    
+    def get_engine_perf(self, engine_name: str) -> Dict[str, Any]:
+        """获取指定引擎的性能统计"""
+        with self._lock:
+            stats = self._perf_stats.get(engine_name, {})
+            if not stats:
+                return {}
+            result = dict(stats)
+            if result.get("total_requests", 0) > 0:
+                result["avg_time"] = round(result["total_time"] / result["total_requests"], 3)
+            else:
+                result["avg_time"] = 0.0
+            if result.get("min_time") == float('inf'):
+                result["min_time"] = 0.0
+            return result
+    
+    def reset_perf_stats(self):
+        """重置所有性能统计"""
+        with self._lock:
+            self._perf_stats.clear()
+            logger.info("性能统计已重置")
+    
+    # ==================== ★ 新增：响应缓存管理方法 ====================
+    
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """获取响应缓存统计"""
+        return self._response_cache.get_stats()
+    
+    def enable_cache(self):
+        """启用响应缓存"""
+        self._cache_enabled = True
+        logger.info("响应缓存已启用")
+    
+    def disable_cache(self):
+        """禁用响应缓存"""
+        self._cache_enabled = False
+        logger.info("响应缓存已禁用")
+    
+    def set_cache_enabled(self, enabled: bool):
+        """设置缓存开关"""
+        self._cache_enabled = enabled
+        state = "启用" if enabled else "禁用"
+        logger.info(f"响应缓存已{state}")
+    
+    def flush_cache(self):
+        """清空所有缓存"""
+        self._response_cache.clear()
+        with self._cache_lock:
+            self._cache.clear()
+        logger.info("所有缓存已清空")
+    
+    # ==================== 资源与内存管理 ====================
+    
+    def get_memory_info(self) -> Dict:
+        """获取内存使用情况"""
+        with self._lock:
+            history_size = sum(len(v) for v in self._history.values())
+        with self._cache_lock:
+            cache_size = len(self._cache)
+        return {
+            "history_entries": history_size,
+            "history_sessions": len(self._history),
+            "cache_entries": cache_size,
+            "cache_max": self._CACHE_MAX_SIZE,
+            "engines_loaded": len(self._engines),
+        }
+
+
+# ==================== 便捷函数 ====================
+
+# 全局单例
+_engine_manager: Optional[EngineManager] = None
+
+
+def get_engine_manager() -> EngineManager:
+    """获取引擎管理器单例"""
+    global _engine_manager
+    if _engine_manager is None:
+        _engine_manager = EngineManager()
+        _engine_manager.initialize()
+    return _engine_manager
+
+
+def chat(prompt: str, **kwargs) -> str:
+    """
+    便捷对话函数
+    
+    使用示例：
+        from shared.engine_manager import chat
+        response = chat("你好")
+        response = chat("你好", engine="ollama")
+    """
+    engine = get_engine_manager()
+    result = engine.chat(prompt, **kwargs)
+    return result.content
+
+
+def stream_chat(prompt: str, **kwargs):
+    """
+    便捷流式对话函数
+    
+    使用示例：
+        from shared.engine_manager import stream_chat
+        for token in stream_chat("你好"):
+            print(token, end="")
+    """
+    engine = get_engine_manager()
+    return engine.stream_chat(prompt, **kwargs)
+
+
+# ==================== 测试 ====================
+
+if __name__ == "__main__":
+    print("=== Engine Manager 测试 ===\n")
+    
+    # 创建引擎管理器
+    engine = EngineManager()
+    engine.initialize()
+    
+    # 显示状态
+    print("\n引擎状态:")
+    status = engine.get_status()
+    for name, info in status.items():
+        icon = "🟢" if info["available"] else "⚪"
+        active = " (当前)" if info["is_active"] else ""
+        print(f"  {icon} {name}{active} - 模型: {info['model']}")
+    
+    # 测试对话
+    print("\n测试对话:")
+    try:
+        response = engine.chat("你好，请简单介绍一下自己")
+        print(f"引擎: {response.engine}")
+        print(f"响应时间: {response.response_time:.2f}秒")
+        print(f"回复: {response.content[:100]}...")
+    except Exception as e:
+        print(f"对话失败: {e}")

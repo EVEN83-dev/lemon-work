@@ -1,0 +1,12 @@
+[
+  {
+    "toolId": "test_tool",
+    "capability": "FILE_WRITE",
+    "allowed": true
+  },
+  {
+    "toolId": "/tmp/safe/*",
+    "capability": "FILE_WRITE",
+    "allowed": true
+  }
+]

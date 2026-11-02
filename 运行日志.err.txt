@@ -1,0 +1,52 @@
+[ProcessBridge] STDIO 桥脚本未找到，候选: ['D:\\YH-lemon\\mimo-gui\\electron-stdio.js', 'D:\\YH-lemon\\LemonWork\\mimo-gui\\electron-stdio.js', 'C:\\Users\\Legion/小米AI/mimo-gui/electron-stdio.js']；将禁用 STDIO 模式回退本地引擎
+ACP SDK 不可用，ACP Bridge 功能将禁用: No module named 'acp'
+2026-11-02 20:43:48,296 [INFO] [EngineManager] 准备加载 OllamaLoadBalancer (当前状态: None)
+2026-11-02 20:43:48,296 [INFO] [EngineManager] 尝试延迟导入 core.ollama_load_balancer ...
+2026-11-02 20:43:48,297 [INFO] [EngineManager] ✅ 延迟导入 OllamaLoadBalancer 成功！
+2026-11-02 20:43:48,297 [INFO] [EngineManager] _ollama_lb 初始化完成: 已启用
+2026-11-02 20:43:48,310 [INFO] [389M-4] confirm 技能=16（来源注册表） | 较执行层新增: ['autocheck_runner', 'delete_file', 'docker_skill', 'file_organizer', 'mcp_bridge', 'multi_edit', 'run_command', 'spawn_subagent', 'ssh_skill', 'stop_command', 'virus_scanner'] | 较执行层移除: ['terminal_run']
+2026-11-02 20:43:48,494 [INFO] ollama 可用
+2026-11-02 20:43:48,495 [INFO] mimocode 可用
+2026-11-02 20:43:48,495 [INFO] deepseek 可用
+2026-11-02 20:43:48,650 [INFO] miemie_v1 可用
+2026-11-02 20:43:48,650 [INFO] 当前引擎: deepseek, 可用引擎: ['ollama', 'mimocode', 'deepseek', 'miemie_v1']
+2026-11-02 20:43:48,650 [INFO] HealthMonitor 已启动
+2026-11-02 20:43:49,100 [INFO] [EngineManager] Custom engine registered: compat_moonshot_test (Moonshot Test) available=False
+2026-11-02 20:43:49,102 [INFO] [EngineManager] Loaded 1 custom engines from C:\Users\Legion/.lemoncode/custom_engines.json
+2026-11-02 20:43:49,102 [INFO] EngineManager 初始化完成，健康监控已启动
+2026-11-02 20:43:49,267 [INFO] ollama 可用
+2026-11-02 20:43:49,268 [INFO] mimocode 可用
+2026-11-02 20:43:49,268 [INFO] deepseek 可用
+2026-11-02 20:43:49,268 [INFO] miemie_v1 可用
+2026-11-02 20:43:49,697 [WARNING] compat_moonshot_test 不可用
+2026-11-02 20:43:49,697 [INFO] 当前引擎: deepseek, 可用引擎: ['ollama', 'mimocode', 'deepseek', 'miemie_v1']
+2026-11-02 20:43:50,102 [INFO] [EngineManager] Custom engine registered: compat_moonshot_test (Moonshot Test) available=False
+2026-11-02 20:43:50,103 [INFO] [EngineManager] Loaded 1 custom engines from C:\Users\Legion/.lemoncode/custom_engines.json
+2026-11-02 20:43:50,103 [INFO] EngineManager 初始化完成，健康监控已启动
+2026-11-02 20:43:50,131 [INFO] LSPManager (Qt) initialized with diagnostic/completion caching
+2026-11-02 20:43:50,163 [INFO] [MultiInstanceManager] 恢复0个会话状态, 0个已过期(from health_20261102_203659.json)
+2026-11-02 20:43:50,191 [INFO] [SessionMemory] 初始化完成: D:\YH-lemon\LemonWork\data\session_memory.db
+2026-11-02 20:43:50,192 [INFO] Loaded locale file: en_US.json (13 keys)
+2026-11-02 20:43:50,192 [INFO] Loaded locale file: zh_CN.json (10 keys)
+2026-11-02 20:43:50,192 [INFO] Loaded locale file: en.json (30 keys)
+2026-11-02 20:43:50,193 [INFO] Loaded locale file: zh.json (30 keys)
+2026-11-02 20:43:50,193 [DEBUG] Language detected from config: zh_CN
+2026-11-02 20:43:50,238 [INFO] Loaded locale file: en_US.json (13 keys)
+2026-11-02 20:43:50,238 [INFO] Loaded locale file: zh_CN.json (10 keys)
+2026-11-02 20:43:50,238 [INFO] Loaded locale file: en.json (30 keys)
+2026-11-02 20:43:50,238 [INFO] Loaded locale file: zh.json (30 keys)
+2026-11-02 20:43:50,239 [DEBUG] Language detected from config: zh_CN
+2026-11-02 20:43:50,820 [WARNING] 咩咩像素矩阵未找到: D:\YH-lemon\LemonWork\data\miemie\miemie_pixel_map.json
+Traceback (most recent call last):
+  File "D:\YH-lemon\LemonWork\standard_mode\ui\main_window.py", line 1717, in _init_ui
+    from vizboard.ui.dock_widget import KiwiPanel, VizboardDockSource
+ModuleNotFoundError: No module named 'vizboard'
+Traceback (most recent call last):
+  File "D:\YH-lemon\LemonWork\standard_mode\ui\hybrid_mode_web_panel.py", line 823, in _setup_bridge
+    from hybrid_mode.core.hybrid_mode_bridge import HybridBridge
+ModuleNotFoundError: No module named 'hybrid_mode'
+2026-11-02 20:43:56,605 [DEBUG] Skills 处理失败（非致命）: UniversalSkillRouter.invoke() missing 1 required positional argument: 'args'
+2026-11-02 20:43:56,605 [INFO] [DeepSeek] chat() → https://api.deepseek.com/v1/chat/completions model=deepseek-chat timeout=60s
+2026-11-02 20:43:57,476 [INFO] [DeepSeek] chat() ← status=200
+2026-11-02 20:43:57,484 [DEBUG] Skills 处理失败（非致命）: UniversalSkillRouter.invoke() missing 1 required positional argument: 'args'
+2026-11-02 20:43:57,487 [DEBUG] Skills 处理失败（非致命）: UniversalSkillRouter.invoke() missing 1 required positional argument: 'args'

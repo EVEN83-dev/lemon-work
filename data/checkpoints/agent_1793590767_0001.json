@@ -1,0 +1,14 @@
+{
+  "task_id": "agent_1793590767",
+  "step": 1,
+  "state": {
+    "tool_calls": [
+      "remote_bank_reverse"
+    ],
+    "iteration": 1
+  },
+  "metadata": {
+    "engine": "ollama"
+  },
+  "timestamp": 1793590774.220022
+}

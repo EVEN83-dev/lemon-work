@@ -1,0 +1,568 @@
+{
+  "timestamp": "2026-08-26 18:21:00",
+  "total_tests": 30,
+  "passed": 30,
+  "pass_rate": 100.0,
+  "avg_duration_ms": 5047.1,
+  "results": [
+    {
+      "index": 1,
+      "skill": "math_solver",
+      "args_keys": [
+        "expression",
+        "operation"
+      ],
+      "expect_success": true,
+      "actual_success": true,
+      "matched": true,
+      "duration_ms": 439.3,
+      "error": "",
+      "output_preview": "simplify(2+3*4, x) =\n14"
+    },
+    {
+      "index": 2,
+      "skill": "math_solver",
+      "args_keys": [
+        "expression",
+        "operation",
+        "variable"
+      ],
+      "expect_success": true,
+      "actual_success": true,
+      "matched": true,
+      "duration_ms": 30.8,
+      "error": "",
+      "output_preview": "solve(x**2-1, x) =\n[-1, 1]"
+    },
+    {
+      "index": 3,
+      "skill": "finance_assistant",
+      "args_keys": [
+        "analysis_type",
+        "principal",
+        "rate",
+        "periods"
+      ],
+      "expect_success": true,
+      "actual_success": true,
+      "matched": true,
+      "duration_ms": 0.0,
+      "error": "",
+      "output_preview": "=== Loan Calculation ===\nPrincipal: 100000\nAnnual Rate: 5.0%\nTerm: 30 months\nMonthly Payment: 3552.9"
+    },
+    {
+      "index": 4,
+      "skill": "code_formatter",
+      "args_keys": [
+        "code",
+        "language"
+      ],
+      "expect_success": true,
+      "actual_success": true,
+      "matched": true,
+      "duration_ms": 0.0,
+      "error": "",
+      "output_preview": "=== Code Formatting Report (pep8) ===\n\nStyle: PEP8\nIssues found: 0\n\n--- Formatted Code ---\nx=1;y=2"
+    },
+    {
+      "index": 5,
+      "skill": "code_graph",
+      "args_keys": [
+        "code",
+        "language"
+      ],
+      "expect_success": true,
+      "actual_success": true,
+      "matched": true,
+      "duration_ms": 0.0,
+      "error": "",
+      "output_preview": "=== Dependency Graph ===\n\nTotal imports: 0\n  Stdlib: 0\n  External: 0\n  Internal: 0\n\nLegend:\n  +- = i"
+    },
+    {
+      "index": 6,
+      "skill": "code_psychologist",
+      "args_keys": [
+        "code",
+        "language"
+      ],
+      "expect_success": true,
+      "actual_success": true,
+      "matched": true,
+      "duration_ms": 1.0,
+      "error": "",
+      "output_preview": "============================================================\nCODE PSYCHOLOGY REPORT\n================"
+    },
+    {
+      "index": 7,
+      "skill": "code_reviewer",
+      "args_keys": [
+        "code",
+        "language",
+        "review_type"
+      ],
+      "expect_success": true,
+      "actual_success": true,
+      "matched": true,
+      "duration_ms": 0.0,
+      "error": "",
+      "output_preview": "=== 代码审查报告 ===\n语言: python\n代码行数: 2\n审查类型: security\n质量评分: 100/100\n问题统计: [严重] 0  [警告] 0  [建议] 0\n\n✅ 未发现明显"
+    },
+    {
+      "index": 8,
+      "skill": "academic_writer",
+      "args_keys": [
+        "topic",
+        "style"
+      ],
+      "expect_success": true,
+      "actual_success": true,
+      "matched": true,
+      "duration_ms": 0.0,
+      "error": "",
+      "output_preview": "# Introduction\n\n**Topic:** machine learning\n**Citation Style:** APA 7th Edition\n**Target Length:** 5"
+    },
+    {
+      "index": 9,
+      "skill": "requirement_amplifier",
+      "args_keys": [
+        "requirement",
+        "detail_level"
+      ],
+      "expect_success": true,
+      "actual_success": true,
+      "matched": true,
+      "duration_ms": 3.0,
+      "error": "",
+      "output_preview": "# Requirement Amplification Report\n\n**Original Requirement:** user login page\n**Detail Level:** 3/5\n"
+    },
+    {
+      "index": 10,
+      "skill": "fact_checker",
+      "args_keys": [
+        "claim"
+      ],
+      "expect_success": true,
+      "actual_success": true,
+      "matched": true,
+      "duration_ms": 30031.2,
+      "error": "",
+      "output_preview": "=== Fact Check Report ===\n\nClaim: Python was created in 1991\nSources consulted: 0\n\n[Result]\nNo web s"
+    },
+    {
+      "index": 11,
+      "skill": "deep_researcher",
+      "args_keys": [
+        "topic",
+        "depth"
+      ],
+      "expect_success": true,
+      "actual_success": true,
+      "matched": true,
+      "duration_ms": 20032.1,
+      "error": "",
+      "output_preview": "# Research Report: quantum computing\n\n**Depth Level:** 1/5\n**Sources Found:** 0\n\n---\n\n## Summary\n\nNo"
+    },
+    {
+      "index": 12,
+      "skill": "super_researcher",
+      "args_keys": [
+        "topic",
+        "rounds"
+      ],
+      "expect_success": true,
+      "actual_success": true,
+      "matched": true,
+      "duration_ms": 100136.8,
+      "error": "",
+      "output_preview": "================================================================\nSUPER RESEARCH REPORT: renewable en"
+    },
+    {
+      "index": 13,
+      "skill": "deploy_helper",
+      "args_keys": [
+        "project_type",
+        "target"
+      ],
+      "expect_success": true,
+      "actual_success": true,
+      "matched": true,
+      "duration_ms": 0.0,
+      "error": "",
+      "output_preview": "# Deployment Package\n\n**Project Type:** web\n**Target:** localhost\n**Port:** 8080\n**Config:** default"
+    },
+    {
+      "index": 14,
+      "skill": "pomodoro_skill",
+      "args_keys": [
+        "minutes"
+      ],
+      "expect_success": true,
+      "actual_success": true,
+      "matched": true,
+      "duration_ms": 1.0,
+      "error": "",
+      "output_preview": "{'error': 'Task not found'}"
+    },
+    {
+      "index": 15,
+      "skill": "env_checker",
+      "args_keys": [],
+      "expect_success": true,
+      "actual_success": true,
+      "matched": true,
+      "duration_ms": 156.5,
+      "error": "",
+      "output_preview": "{'python_version': '3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]"
+    },
+    {
+      "index": 16,
+      "skill": "config_manager",
+      "args_keys": [
+        "action",
+        "path"
+      ],
+      "expect_success": true,
+      "actual_success": true,
+      "matched": true,
+      "duration_ms": 0.0,
+      "error": "",
+      "output_preview": "Config loaded: 2 keys"
+    },
+    {
+      "index": 17,
+      "skill": "log_analyzer",
+      "args_keys": [
+        "path"
+      ],
+      "expect_success": false,
+      "actual_success": false,
+      "matched": true,
+      "duration_ms": 1.0,
+      "error": "Log file not found: nonexistent.log",
+      "output_preview": ""
+    },
+    {
+      "index": 18,
+      "skill": "physics_experiment",
+      "args_keys": [
+        "experiment",
+        "params"
+      ],
+      "expect_success": true,
+      "actual_success": true,
+      "matched": true,
+      "duration_ms": 74.9,
+      "error": "",
+      "output_preview": "Pendulum Simulation Results:\n  Length: 1.0 m\n  Gravity: 9.81 m/s^2\n  Initial angle: 30.0 degrees\n  P"
+    },
+    {
+      "index": 19,
+      "skill": "html_to_video",
+      "args_keys": [
+        "content",
+        "duration"
+      ],
+      "expect_success": true,
+      "actual_success": true,
+      "matched": true,
+      "duration_ms": 0.0,
+      "error": "",
+      "output_preview": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"UTF-8\">\n<meta name=\"viewport\" content=\"width="
+    },
+    {
+      "index": 20,
+      "skill": "multi_model_debater",
+      "args_keys": [
+        "topic",
+        "perspectives"
+      ],
+      "expect_success": true,
+      "actual_success": true,
+      "matched": true,
+      "duration_ms": 1.0,
+      "error": "",
+      "output_preview": "================================================================\nMULTI-PERSPECTIVE DEBATE ANALYSIS\n="
+    },
+    {
+      "index": 21,
+      "skill": "frontend_designer",
+      "args_keys": [
+        "framework",
+        "component_type",
+        "description"
+      ],
+      "expect_success": true,
+      "actual_success": true,
+      "matched": true,
+      "duration_ms": 0.0,
+      "error": "",
+      "output_preview": "Generated html code for: login form\n\n<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\""
+    },
+    {
+      "index": 22,
+      "skill": "search_code_semantic",
+      "args_keys": [
+        "query",
+        "top_k"
+      ],
+      "expect_success": true,
+      "actual_success": true,
+      "matched": true,
+      "duration_ms": 308.8,
+      "error": "",
+      "output_preview": "语义搜索 'def main' — 找到 3 个相关文件:\n\n1. [high] .mimo_snapshots\\snap_010152_1\\mimo_agent\\main.py (相关度: 280."
+    },
+    {
+      "index": 23,
+      "skill": "meta_skill",
+      "args_keys": [
+        "task_description"
+      ],
+      "expect_success": true,
+      "actual_success": true,
+      "matched": true,
+      "duration_ms": 0.0,
+      "error": "",
+      "output_preview": "Skill 'convert_csv_to' generated (not saved - set approve=True to save)."
+    },
+    {
+      "index": 24,
+      "skill": "pdf_reader",
+      "args_keys": [
+        "path",
+        "extract_type"
+      ],
+      "expect_success": false,
+      "actual_success": false,
+      "matched": true,
+      "duration_ms": 0.0,
+      "error": "File not found: nonexistent.pdf",
+      "output_preview": ""
+    },
+    {
+      "index": 25,
+      "skill": "image_analyzer",
+      "args_keys": [
+        "image_path"
+      ],
+      "expect_success": false,
+      "actual_success": false,
+      "matched": true,
+      "duration_ms": 0.0,
+      "error": "Image not found: nonexistent.png",
+      "output_preview": ""
+    },
+    {
+      "index": 26,
+      "skill": "image_processor",
+      "args_keys": [
+        "path",
+        "operation"
+      ],
+      "expect_success": false,
+      "actual_success": false,
+      "matched": true,
+      "duration_ms": 0.0,
+      "error": "Invalid arguments for image_processor: _handle_image_process() got an unexpected keyword argument 'path'",
+      "output_preview": ""
+    },
+    {
+      "index": 27,
+      "skill": "git",
+      "args_keys": [
+        "subcommand"
+      ],
+      "expect_success": false,
+      "actual_success": false,
+      "matched": true,
+      "duration_ms": 60.7,
+      "error": "fatal: not a git repository (or any of the parent directories): .git",
+      "output_preview": ""
+    },
+    {
+      "index": 28,
+      "skill": "lsp_skill",
+      "args_keys": [
+        "action",
+        "file_path"
+      ],
+      "expect_success": true,
+      "actual_success": true,
+      "matched": true,
+      "duration_ms": 0.0,
+      "error": "",
+      "output_preview": "LSP not available. Completion items cannot be retrieved."
+    },
+    {
+      "index": 29,
+      "skill": "dap_skill",
+      "args_keys": [
+        "expression"
+      ],
+      "expect_success": true,
+      "actual_success": true,
+      "matched": true,
+      "duration_ms": 0.0,
+      "error": "",
+      "output_preview": "Evaluation of '1+1' not available (DAP not connected)"
+    },
+    {
+      "index": 30,
+      "skill": "test_runner_skill",
+      "args_keys": [],
+      "expect_success": true,
+      "actual_success": true,
+      "matched": true,
+      "duration_ms": 133.4,
+      "error": "",
+      "output_preview": "[ERROR] Test Results: 0 total | 0 passed | 0 failed | 0 errors | 0 skipped"
+    }
+  ],
+  "by_skill": {
+    "math_solver": {
+      "total": 2,
+      "matched": 2,
+      "total_ms": 470.1
+    },
+    "finance_assistant": {
+      "total": 1,
+      "matched": 1,
+      "total_ms": 0.0
+    },
+    "code_formatter": {
+      "total": 1,
+      "matched": 1,
+      "total_ms": 0.0
+    },
+    "code_graph": {
+      "total": 1,
+      "matched": 1,
+      "total_ms": 0.0
+    },
+    "code_psychologist": {
+      "total": 1,
+      "matched": 1,
+      "total_ms": 1.0
+    },
+    "code_reviewer": {
+      "total": 1,
+      "matched": 1,
+      "total_ms": 0.0
+    },
+    "academic_writer": {
+      "total": 1,
+      "matched": 1,
+      "total_ms": 0.0
+    },
+    "requirement_amplifier": {
+      "total": 1,
+      "matched": 1,
+      "total_ms": 3.0
+    },
+    "fact_checker": {
+      "total": 1,
+      "matched": 1,
+      "total_ms": 30031.2
+    },
+    "deep_researcher": {
+      "total": 1,
+      "matched": 1,
+      "total_ms": 20032.1
+    },
+    "super_researcher": {
+      "total": 1,
+      "matched": 1,
+      "total_ms": 100136.8
+    },
+    "deploy_helper": {
+      "total": 1,
+      "matched": 1,
+      "total_ms": 0.0
+    },
+    "pomodoro_skill": {
+      "total": 1,
+      "matched": 1,
+      "total_ms": 1.0
+    },
+    "env_checker": {
+      "total": 1,
+      "matched": 1,
+      "total_ms": 156.5
+    },
+    "config_manager": {
+      "total": 1,
+      "matched": 1,
+      "total_ms": 0.0
+    },
+    "log_analyzer": {
+      "total": 1,
+      "matched": 1,
+      "total_ms": 1.0
+    },
+    "physics_experiment": {
+      "total": 1,
+      "matched": 1,
+      "total_ms": 74.9
+    },
+    "html_to_video": {
+      "total": 1,
+      "matched": 1,
+      "total_ms": 0.0
+    },
+    "multi_model_debater": {
+      "total": 1,
+      "matched": 1,
+      "total_ms": 1.0
+    },
+    "frontend_designer": {
+      "total": 1,
+      "matched": 1,
+      "total_ms": 0.0
+    },
+    "search_code_semantic": {
+      "total": 1,
+      "matched": 1,
+      "total_ms": 308.8
+    },
+    "meta_skill": {
+      "total": 1,
+      "matched": 1,
+      "total_ms": 0.0
+    },
+    "pdf_reader": {
+      "total": 1,
+      "matched": 1,
+      "total_ms": 0.0
+    },
+    "image_analyzer": {
+      "total": 1,
+      "matched": 1,
+      "total_ms": 0.0
+    },
+    "image_processor": {
+      "total": 1,
+      "matched": 1,
+      "total_ms": 0.0
+    },
+    "git": {
+      "total": 1,
+      "matched": 1,
+      "total_ms": 60.7
+    },
+    "lsp_skill": {
+      "total": 1,
+      "matched": 1,
+      "total_ms": 0.0
+    },
+    "dap_skill": {
+      "total": 1,
+      "matched": 1,
+      "total_ms": 0.0
+    },
+    "test_runner_skill": {
+      "total": 1,
+      "matched": 1,
+      "total_ms": 133.4
+    }
+  }
+}

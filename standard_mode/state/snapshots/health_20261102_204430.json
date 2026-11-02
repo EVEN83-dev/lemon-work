@@ -1,0 +1,111 @@
+{
+  "timestamp": 1793623470.182656,
+  "cluster": {
+    "total": 9,
+    "running": 0,
+    "director": {
+      "id": "mimo_director",
+      "name": "指挥官",
+      "role": "director",
+      "state": "stopped",
+      "port": 4097,
+      "tasks": 0,
+      "errors": 0,
+      "has_bridge": false,
+      "has_session": false
+    },
+    "workers": [
+      {
+        "id": "mimo_build",
+        "name": "构建者",
+        "role": "build",
+        "state": "stopped",
+        "port": 4098,
+        "tasks": 0,
+        "errors": 0,
+        "has_bridge": false,
+        "has_session": false
+      },
+      {
+        "id": "mimo_plan",
+        "name": "规划师",
+        "role": "plan",
+        "state": "stopped",
+        "port": 4099,
+        "tasks": 0,
+        "errors": 0,
+        "has_bridge": false,
+        "has_session": false
+      },
+      {
+        "id": "mimo_compose",
+        "name": "编辑者",
+        "role": "compose",
+        "state": "stopped",
+        "port": 4100,
+        "tasks": 0,
+        "errors": 0,
+        "has_bridge": false,
+        "has_session": false
+      },
+      {
+        "id": "mimo_general",
+        "name": "执行者",
+        "role": "general",
+        "state": "stopped",
+        "port": 4101,
+        "tasks": 0,
+        "errors": 0,
+        "has_bridge": false,
+        "has_session": false
+      },
+      {
+        "id": "mimo_review",
+        "name": "审查员",
+        "role": "review",
+        "state": "stopped",
+        "port": 4102,
+        "tasks": 0,
+        "errors": 0,
+        "has_bridge": false,
+        "has_session": false
+      },
+      {
+        "id": "mimo_test",
+        "name": "测试工程师",
+        "role": "test",
+        "state": "stopped",
+        "port": 4103,
+        "tasks": 0,
+        "errors": 0,
+        "has_bridge": false,
+        "has_session": false
+      },
+      {
+        "id": "mimo_docs",
+        "name": "文档撰写员",
+        "role": "docs",
+        "state": "stopped",
+        "port": 4104,
+        "tasks": 0,
+        "errors": 0,
+        "has_bridge": false,
+        "has_session": false
+      },
+      {
+        "id": "mimo_devops",
+        "name": "运维工程师",
+        "role": "devops",
+        "state": "stopped",
+        "port": 4105,
+        "tasks": 0,
+        "errors": 0,
+        "has_bridge": false,
+        "has_session": false
+      }
+    ],
+    "active_workers": 0,
+    "mimo_exe": ""
+  },
+  "sessions": []
+}

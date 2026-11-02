@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lemon Code Terminal</title>
+<link rel="stylesheet" href="vendor/xterm.css">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: #1a1a1a;
+    padding-top: 4px; padding-left: 6px;
+  }
+  #terminal-container { width: 100%; height: 100%; padding: 0; }
+  .xterm { height: 100%; }
+  #boot-status {
+    position: fixed; top: 8px; left: 12px;
+    color: #6e7681; font-family: monospace; font-size: 11px;
+    z-index: 10; pointer-events: none;
+    transition: opacity .4s;
+  }
+  #search-bar {
+    display: none; position: fixed; top: 0; right: 20px;
+    background: #1e1e22; border: 1px solid #3a3a3f; border-top: none;
+    border-radius: 0 0 6px 6px; padding: 4px 8px; z-index: 99998;
+    font-family: "JetBrains Mono","Consolas",monospace; font-size: 12px;
+  }
+  #search-bar.show { display: flex; align-items: center; gap: 4px; }
+  #search-input {
+    width: 200px; padding: 3px 6px; background: #0d1117; color: #c9d1d9;
+    border: 1px solid #3a3a3f; border-radius: 3px; font-size: 12px;
+    font-family: inherit; outline: none;
+  }
+  #search-input:focus { border-color: #ff6b35; }
+  .search-btn {
+    background: transparent; color: #8b949e; border: 1px solid #3a3a3f;
+    border-radius: 3px; padding: 2px 6px; cursor: pointer; font-size: 11px;
+  }
+  .search-btn:hover { color: #ff6b35; border-color: #ff6b35; }
+  #search-count { color: #6e7681; font-size: 10px; min-width: 40px; }
+</style>
+</head>
+<body>
+<div id="terminal-container"></div>
+<div id="boot-status">[Lemon Terminal] 初始化中…</div>
+<div id="search-bar">
+  <input id="search-input" type="text" placeholder="搜索...">
+  <span id="search-count"></span>
+  <button class="search-btn" id="search-prev" title="上一个 (Shift+Enter)">&#9650;</button>
+  <button class="search-btn" id="search-next" title="下一个 (Enter)">&#9660;</button>
+  <button class="search-btn" id="search-case" title="区分大小写">Aa</button>
+  <button class="search-btn" id="search-close" title="关闭 (Esc)">x</button>
+</div>
+
+<script src="vendor/xterm.js"></script>
+<script src="vendor/xterm-addon-web-links.js"></script>
+<script src="vendor/xterm-addon-search.js"></script>
+<script src="qwebchannel.js"></script>
+<script>
+(function() {
+  var bootEl = document.getElementById('boot-status');
+  function boot(text, color) {
+    if (!bootEl) return;
+    bootEl.textContent = text;
+    if (color) bootEl.style.color = color;
+  }
+
+  var term;
+  try {
+    term = new Terminal({
+      cursorBlink: true,
+      cursorStyle: 'bar',
+      fontSize: 13,
+      fontFamily: '"JetBrains Mono", "Cascadia Code", "Consolas", "Cascadia Mono", monospace',
+      theme: {
+        background: '#080808',
+        foreground: '#c9d1d9',
+        cursor:     '#ff6b35',
+        selectionBackground: '#ff6b3544',
+        black:      '#161b22', red:        '#e05561', green:      '#8cc265',
+        yellow:     '#d18f52', blue:       '#4aa5f0', magenta:    '#c162de',
+        cyan:       '#42b3c2', white:      '#d4d4d4',
+        brightBlack:  '#6e7681', brightRed:    '#ff6b6b', brightGreen:  '#98e06a',
+        brightYellow: '#ffb86c', brightBlue:   '#74b9ff', brightMagenta:'#e17bff',
+        brightCyan:   '#6ef0ff', brightWhite:  '#ffffff',
+      },
+      scrollback: 10000,
+      allowTransparency: true,
+      windowsMode: true,
+      fastScrollModifier: 'alt',
+      fastScrollSensitivity: 5,
+      scrollSensitivity: 1,
+    });
+    window.term = term;
+  } catch (e) {
+    boot('[Lemon Terminal] xterm.js 加载失败: ' + e.message, '#e05561');
+    return;
+  }
+  boot('[Lemon Terminal] xterm.js 已加载，正在连接 QWebChannel…', '#6e7681');
+
+  try {
+    var webLinksAddon = new WebLinksAddon.WebLinksAddon();
+    term.loadAddon(webLinksAddon);
+  } catch (e) {
+    console.warn('[Lemon] WebLinksAddon 加载失败:', e);
+  }
+
+  var searchAddon = null;
+  try {
+    searchAddon = new SearchAddon.SearchAddon();
+    term.loadAddon(searchAddon);
+  } catch (e) {
+    console.warn('[Lemon] SearchAddon 加载失败:', e);
+  }
+
+  try {
+    term.open(document.getElementById('terminal-container'));
+  } catch (e) {
+    boot('[Lemon Terminal] term.open() 异常: ' + e.message, '#e05561');
+    return;
+  }
+
+  window._termFit = function() { try { loopFit(); } catch (e) {} };
+  window._termInputReady = false;
+
+  // ── 字符像素测量 ──
+  var _measureEl = null;
+  function measureCell() {
+    if (!_measureEl) {
+      _measureEl = document.createElement('span');
+      _measureEl.style.cssText = 'position:absolute;visibility:hidden;left:0;top:0;' +
+        'font-family:"JetBrains Mono","Cascadia Code","Consolas",monospace;' +
+        'font-size:13px;line-height:normal;white-space:pre;';
+      document.body.appendChild(_measureEl);
+    }
+    _measureEl.textContent = 'M';
+    var r = _measureEl.getBoundingClientRect();
+    var w = r.width || 0;
+    var h = r.height || 0;
+    if (!w || !h) {
+      try {
+        var rs = term && term._core && term._core._renderService;
+        if (rs && rs.dimensions && rs.dimensions.css && rs.dimensions.css.cell) {
+          w = rs.dimensions.css.cell.width || w;
+          h = rs.dimensions.css.cell.height || h;
+        }
+      } catch (e) {}
+    }
+    return {w: w, h: h};
+  }
+
+  // ── safeFit ──
+  function safeFit() {
+    try {
+      if (!term || !term.element) return false;
+      var el = document.getElementById('terminal-container');
+      if (!el) return false;
+      var c = measureCell();
+      if (!c.w || !c.h) return false;
+      var w = el.clientWidth;
+      var h = el.clientHeight;
+      if (w <= 0 || h <= 0) return false;
+      var cols = Math.max(40, Math.floor(w / c.w));
+      var rows = Math.max(10, Math.floor(h / c.h));
+      if (cols !== term.cols || rows !== term.rows) {
+        term.resize(cols, rows);
+        if (window._bridge) {
+          try { window._bridge.resize(cols, rows); } catch (e) {}
+        }
+        var sizeEl = document.getElementById('term-size');
+        if (sizeEl) {
+          sizeEl.textContent = 'cols:' + cols + ' rows:' + rows +
+            ' cellW:' + c.w.toFixed(1) + ' containerW:' + w;
+        }
+        return true;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // ── loopFit ──
+  var _fitRAF = null;
+  function loopFit() {
+    if (_fitRAF) cancelAnimationFrame(_fitRAF);
+    var tries = 0;
+    (function step() {
+      tries++;
+      var ok = safeFit();
+      if (ok && tries < 60) {
+        _fitRAF = requestAnimationFrame(step);
+      } else {
+        _fitRAF = null;
+      }
+    })();
+  }
+
+  // ── ResizeObserver ──
+  try {
+    if (typeof ResizeObserver !== 'undefined') {
+      var el = document.getElementById('terminal-container');
+      if (el) new ResizeObserver(function() { loopFit(); }).observe(el);
+    }
+  } catch (e) {}
+
+  // 延迟 fit（字体异步加载）
+  setTimeout(function() { loopFit(); }, 50);
+  setTimeout(function() { loopFit(); }, 300);
+  setTimeout(function() { loopFit(); }, 1000);
+
+  // ═══════════════════════════════════════════════════════════
+  // QWebChannel 连接 — [358章] 带退避重试，禁止失败即死亡
+  // ═══════════════════════════════════════════════════════════
+  function connectChannel() {
+    if (window._termInputReady) return;
+    boot('[Lemon Terminal] 正在连接 QWebChannel…', '#6e7681');
+
+    new QWebChannel(qt.webChannelTransport, function(channel) {
+      var bridge = null;
+      var objKeys = Object.keys(channel.objects);
+      console.log('[Lemon][diag] retry=' + (window._chanRetry||0) + ' keys=', objKeys,
+                  'transport=', typeof qt !== 'undefined' && !!qt.webChannelTransport);
+
+      // 优先：用 Python 注入的明确对象名
+      if (window._pyBridgeName && channel.objects[window._pyBridgeName]) {
+        bridge = channel.objects[window._pyBridgeName];
+        window._bridgeObjName = window._pyBridgeName;
+      }
+
+      // 备选：查找 terminal_ 前缀对象
+      if (!bridge) {
+        for (var i = 0; i < objKeys.length; i++) {
+          if (objKeys[i].indexOf('terminal_') === 0) {
+            bridge = channel.objects[objKeys[i]];
+            window._bridgeObjName = objKeys[i];
+            break;
+          }
+        }
+      }
+
+      // 备选：terminal 对象
+      if (!bridge && channel.objects.terminal) {
+        bridge = channel.objects.terminal;
+        window._bridgeObjName = 'terminal';
+      }
+
+      // 备选：任何可用对象
+      if (!bridge && objKeys.length > 0) {
+        bridge = channel.objects[objKeys[0]];
+        window._bridgeObjName = objKeys[0];
+      }
+
+      if (!bridge) {
+        // [358章] 带退避的自动重试，超过20次才最终放弃
+        window._chanRetry = (window._chanRetry || 0) + 1;
+        if (window._chanRetry > 20) {
+          boot('[Lemon Terminal] bridge 对象不存在(已重试20次) keys=[' + objKeys.join(',') + ']', '#e05561');
+          console.error('[Lemon] channel.objects keys:', objKeys);
+          document.title = 'FAIL:keys=[' + objKeys.join(',') + ']';
+          return;
+        }
+        var delay = Math.min(250 * Math.pow(1.3, window._chanRetry - 1), 3000);
+        boot('[Lemon Terminal] 第' + window._chanRetry + '次重试连接 QWebChannel…', '#6e7681');
+        console.warn('[Lemon] bridge not found, retry #' + window._chanRetry + ' in ' + Math.round(delay) + 'ms, keys:', objKeys);
+        setTimeout(function() {
+          if (window._pyBridgeName) {
+            // 重试前重新读取 Python 侧可能刚注入的新名字
+          }
+          connectChannel();
+        }, delay);
+        return;
+      }
+      console.log('[Lemon] bridge found:', window._bridgeObjName);
+
+      // [358章] 重复连接防护：先断开旧信号
+      if (window._bridge) {
+        try { window._bridge.output_received.disconnect(); } catch(e) {}
+      }
+      window._bridge = bridge;
+      window._chanRetry = 0;
+      boot('[Lemon Terminal] QWebChannel 已连接', '#6e7681');
+
+      // [358章] 连接成功后先回放历史
+      try {
+        bridge.get_history(function(hist) {
+          if (hist) term.write(hist);
+        });
+      } catch(e) { console.warn('[Lemon] get_history 不可用:', e); }
+
+      // ── 监听输出 ──
+      bridge.output_received.connect(function(data) {
+        if (data) term.write(data);
+      });
+
+      // ── 监听启动 ──
+      bridge.process_started.connect(function() {
+        boot('[Lemon Terminal] PTY 已启动', '#4caf50');
+        // [398章] 稳定运行后隐藏启动诊断条（出错时 error_occurred 会再显示）
+        setTimeout(function() {
+          if (window._termInputReady && bootEl) bootEl.style.opacity = '0';
+        }, 1200);
+      });
+
+      // ── 监听退出 ── [358章] 进程退出后允许 _reconnectChannel 触发重连
+      bridge.process_exited.connect(function(code) {
+        term.write('\r\n\x1b[31m[shell] 进程已退出 (' + code + ')。点「重启」恢复。\x1b[0m\r\n');
+        boot('[Lemon Terminal] 进程已退出', '#e05561');
+        window._termInputReady = false;  // 允许 _reconnectChannel 重新连接
+      });
+
+      // ── 监听错误 ──
+      bridge.error_occurred.connect(function(msg) {
+        if (bootEl) bootEl.style.opacity = '1';
+        term.write('\r\n\x1b[31m[error] ' + (msg || '') + '\x1b[0m\r\n');
+      });
+
+      // ── 等尺寸稳定后启动 PTY ──
+      requestAnimationFrame(function() {
+        requestAnimationFrame(function() {
+          safeFit();
+          requestAnimationFrame(function() {
+            var cols = term.cols || 120;
+            var rows = term.rows || 30;
+            if (cols < 20) cols = 120;
+            if (rows < 8) rows = 30;
+            boot('[Lemon Terminal] 启动 PTY (cols=' + cols + ', rows=' + rows + ')…', '#6e7681');
+            try {
+              bridge.start_sized(cols, rows);
+            } catch (e) {
+              try { bridge.start(); } catch (e2) {}
+            }
+            setupTerminalInput(bridge);
+            window._termInputReady = true;
+            term.focus();
+          });
+        });
+      });
+
+      // 兜底：800ms 后如果还没启动就强制启动
+      setTimeout(function() {
+        if (!window._termInputReady) {
+          var cols = term.cols || 120;
+          var rows = term.rows || 30;
+          try { bridge.start_sized(cols, rows); } catch (e) {
+            try { bridge.start(); } catch (e2) {}
+          }
+          setupTerminalInput(bridge);
+          window._termInputReady = true;
+          term.focus();
+        }
+      }, 800);
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // 终端交互：键盘 / 粘贴 / 右键菜单
+  // ═══════════════════════════════════════════════════════════
+  function setupTerminalInput(bridge) {
+    if (window._termInputBound) return;
+    window._termInputBound = true;
+
+    // ── 复制选中文本 ──
+    function copySelection() {
+      var sel = '';
+      try { sel = term.getSelection ? term.getSelection() : ''; } catch (e) {}
+      if (!sel) return;
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(sel).catch(function() {});
+        } else {
+          var ta = document.createElement('textarea');
+          ta.value = sel;
+          document.body.appendChild(ta);
+          ta.select();
+          try { document.execCommand('copy'); } catch (e) {}
+          document.body.removeChild(ta);
+        }
+      } catch (e) {}
+    }
+
+    // ── 从事件读剪贴板 ──
+    function readClipboard(e) {
+      var text = '';
+      try {
+        if (e.clipboardData && e.clipboardData.getData) {
+          text = e.clipboardData.getData('text') || '';
+        } else if (window.clipboardData && window.clipboardData.getData) {
+          text = window.clipboardData.getData('Text') || '';
+        }
+      } catch (ex) {}
+      return text;
+    }
+
+    // ── paste 事件 ──
+    document.addEventListener('paste', function(e) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      var text = readClipboard(e);
+      if (!text) return;
+      try {
+        term.paste(text);
+      } catch (err) {
+        // 降级：分片发送
+        var lines = text.split(/\r?\n/);
+        var i = 0;
+        function sendNext() {
+          if (i >= lines.length) return;
+          var chunk = lines[i];
+          if (chunk) try { bridge.send_input(chunk); } catch (e) {}
+          if (i < lines.length - 1) try { bridge.send_input('\r\n'); } catch (e) {}
+          i++;
+          setTimeout(sendNext, 5);
+        }
+        sendNext();
+      }
+    }, true);
+
+    // ── 右键菜单 ──
+    function showContextMenu(x, y) {
+      var old = document.getElementById('lemon-term-ctxmenu');
+      if (old) old.remove();
+      var hasSel = false;
+      try { hasSel = !!(term.hasSelection && term.hasSelection()); } catch (e) {}
+      var menu = document.createElement('div');
+      menu.id = 'lemon-term-ctxmenu';
+      menu.style.cssText = 'position:fixed;left:' + x + 'px;top:' + y + 'px;' +
+        'background:#1e1e22;border:1px solid #3a3a3f;border-radius:6px;padding:4px 0;' +
+        'box-shadow:0 8px 24px rgba(0,0,0,0.6);z-index:99999;min-width:140px;' +
+        'font-family:"Courier New",monospace;font-size:12px;';
+      function mkItem(label, enabled, onClick) {
+        var it = document.createElement('div');
+        it.textContent = label;
+        it.style.cssText = 'padding:6px 14px;cursor:' + (enabled ? 'pointer' : 'default') +
+          ';color:' + (enabled ? '#e0e0e0' : '#666');
+        if (enabled) {
+          it.onmouseover = function() { it.style.background = '#2a4d7a'; };
+          it.onmouseout = function() { it.style.background = ''; };
+          it.onclick = function(e) { e.stopPropagation(); onClick(); menu.remove(); };
+        }
+        return it;
+      }
+      menu.appendChild(mkItem('粘贴', true, function() {
+        navigator.clipboard.readText().then(function(t) {
+          if (t) try { term.paste(t); } catch (e) {}
+        }).catch(function() {
+          var ta = document.createElement('textarea');
+          ta.style.cssText = 'position:fixed;left:10px;top:10px;width:300px;height:60px;z-index:99999;';
+          ta.value = '';
+          document.body.appendChild(ta);
+          ta.focus(); ta.select();
+        });
+      }));
+      menu.appendChild(mkItem('复制', hasSel, function() {
+        var sel = '';
+        try { sel = term.getSelection ? term.getSelection() : ''; } catch (e) {}
+        if (sel) {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(sel).catch(function() {});
+          }
+        }
+      }));
+      menu.appendChild(mkItem('全选', true, function() {
+        try { term.selectAll(); } catch (e) {}
+      }));
+      menu.appendChild(mkItem('中断 (Ctrl+C)', true, function() {
+        try { bridge.interrupt(); } catch (e) {}
+      }));
+      menu.appendChild(mkItem('清屏 (Ctrl+L)', true, function() {
+        try { bridge.send_input('\x0c'); } catch (e) {}
+      }));
+      menu.appendChild(mkItem('重启终端', true, function() {
+        try { bridge.restart(); } catch (e) {}
+      }));
+      // ★ v6.0-S A-2: Agent联动菜单项
+      menu.appendChild(mkItem('─ Agent ─', false, function() {}));
+      menu.appendChild(mkItem('Agent 状态', true, function() {
+        term.write('\r\n\x1b[38;5;208m[Lemon] 查询Agent状态...\x1b[0m\r\n');
+        try {
+          if (window._bridge && window._bridge.get_run_status) {
+            window._bridge.get_run_status(function(st) {
+              term.write(st ? ('\x1b[32m[Agent状态] ' + st + '\x1b[0m\r\n') : '\x1b[33m[Agent状态] 无活跃Run\x1b[0m\r\n');
+            });
+          } else {
+            term.write('\x1b[33m[Agent状态] 无活跃Run\x1b[0m\r\n');
+          }
+        } catch(e) { term.write('\x1b[33m[Agent状态] 查询失败\x1b[0m\r\n'); }
+      }));
+      menu.appendChild(mkItem('注入指令到Agent', hasSel, function() {
+        var sel = '';
+        try { sel = term.getSelection ? term.getSelection() : ''; } catch (e) {}
+        if (sel) {
+          try {
+            if (window._bridge && window._bridge.inject_to_agent) {
+              window._bridge.inject_to_agent(sel);
+              term.write('\r\n\x1b[32m[Lemon] 已将选中文本注入Agent\x1b[0m\r\n');
+            } else {
+              term.write('\r\n\x1b[33m[Lemon] Agent注入接口不可用\x1b[0m\r\n');
+            }
+          } catch(e) {}
+        }
+      }));
+      document.body.appendChild(menu);
+      setTimeout(function() {
+        function close(ev) {
+          if (menu.contains && !menu.contains(ev.target)) menu.remove();
+          document.removeEventListener('click', close);
+          document.removeEventListener('contextmenu', close);
+        }
+        document.addEventListener('click', close);
+        document.addEventListener('contextmenu', close);
+      }, 0);
+    }
+
+    // 拦截 xterm 右键
+    if (term.element) {
+      term.element.addEventListener('contextmenu', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        showContextMenu(e.clientX, e.clientY);
+        return false;
+      }, true);
+    }
+
+    // ── Ctrl+Click 堆栈行号跳转 ──
+    if (term.element) {
+      term.element.addEventListener('click', function(e) {
+        if (!e.ctrlKey) return;
+        var sel = '';
+        try { sel = term.getSelection(); } catch(ex) {}
+        if (!sel) return;
+        var m = sel.match(/File\s+"([^"]+)",\s*line\s+(\d+)/);
+        if (!m) {
+          m = sel.match(/(\S+\.py):(\d+)/);
+        }
+        if (!m) {
+          m = sel.match(/at\s+(\S+)\((\S+):(\d+)\)/);
+          if (m) m = [null, m[2], m[3]];
+        }
+        if (m && m[1] && m[2]) {
+          try { bridge.navigate_to_file(m[1], parseInt(m[2])); } catch(ex) {}
+        }
+      });
+    }
+
+    // ── 键盘拦截（对标 PyCharm/VS Code） ──
+    term.attachCustomKeyEventHandler(function(e) {
+      if (e.type !== 'keydown') return true;
+      var ctrl = e.ctrlKey, shift = e.shiftKey, alt = e.altKey;
+      var k = e.key;
+      if (!ctrl || alt) return true;
+      var lk = (k || '').toLowerCase();
+
+      // Ctrl+Shift+C/V：保留浏览器复制/粘贴
+      if (shift && (lk === 'c' || lk === 'v')) return true;
+
+      if (lk === 'c') {
+        if (term.hasSelection && term.hasSelection()) {
+          e.preventDefault();
+          copySelection();
+          return false;
+        }
+        e.preventDefault();
+        try { bridge.interrupt(); } catch (e) {}
+        return false;
+      }
+      if (lk === 'v') {
+        e.preventDefault();
+        try {
+          if (navigator.clipboard && navigator.clipboard.readText) {
+            navigator.clipboard.readText().then(function(t) {
+              if (t) term.paste(t);
+            }).catch(function() {});
+          }
+        } catch (ex) {}
+        return false;
+      }
+      if (lk === 'a') {
+        e.preventDefault();
+        try { term.selectAll(); } catch (ex) {}
+        return false;
+      }
+      if (lk === 'l') {
+        e.preventDefault();
+        try { bridge.send_input('\x0c'); } catch (e) {}
+        return false;
+      }
+      if (lk === 'd') {
+        e.preventDefault();
+        try { bridge.send_input('\x04'); } catch (e) {}
+        return false;
+      }
+      if (lk === 'f') {
+        e.preventDefault();
+        _toggleSearch();
+        return false;
+      }
+      return true;
+    });
+
+    // ── 普通按键 → PTY ──
+    term.onData(function(data) {
+      if (data === '\t') {
+        _handleTabCompletion(bridge);
+        return;
+      }
+      _tabCompletions = [];
+      _tabCompletionIdx = -1;
+
+      // ★ v6.0-S A-2: Lemon快捷指令拦截
+      if (data === '\r' || data === '\n') {
+        var currentLine = _getCurrentLine().trim();
+        if (currentLine === 'lemon:stop') {
+          term.write('\r\n\x1b[38;5;208m[Lemon] 正在中断Agent命令...\x1b[0m\r\n');
+          try { bridge.interrupt(); } catch(e) {}
+          _clearCurrentLine(bridge);
+          return;
+        }
+        if (currentLine === 'lemon:status') {
+          term.write('\r\n\x1b[38;5;208m[Lemon] 查询Agent状态...\x1b[0m\r\n');
+          try {
+            if (window._bridge && window._bridge.get_run_status) {
+              window._bridge.get_run_status(function(st) {
+                if (st) {
+                  term.write('\x1b[32m[Agent状态] ' + st + '\x1b[0m\r\n');
+                } else {
+                  term.write('\x1b[33m[Agent状态] 无活跃Run\x1b[0m\r\n');
+                }
+              });
+            } else {
+              term.write('\x1b[33m[Agent状态] 无活跃Run\x1b[0m\r\n');
+            }
+          } catch(e) {
+            term.write('\x1b[33m[Agent状态] 查询失败\x1b[0m\r\n');
+          }
+          _clearCurrentLine(bridge);
+          return;
+        }
+      }
+
+      try { bridge.send_input(data); } catch (e) {}
+    });
+
+    function _clearCurrentLine(bridge) {
+      // 清除已输入的lemon:指令行（发送Ctrl+C取消当前行）
+      try { bridge.send_input('\x03'); } catch(e) {}
+    }
+  }
+
+  // ── Tab 补全 ──
+  var _tabCompletions = [];
+  var _tabCompletionIdx = -1;
+  var _tabPartial = '';
+
+  function _getCurrentLine() {
+    if (!term || !term.buffer) return '';
+    var buf = term.buffer;
+    var line = buf.getLine(buf.baseY + buf.cursorY);
+    if (!line) return '';
+    return line.translateToString(true).substring(0, buf.cursorX);
+  }
+
+  function _handleTabCompletion(bridge) {
+    var line = _getCurrentLine();
+    if (_tabCompletions.length > 0 && _tabPartial) {
+      _tabCompletionIdx = (_tabCompletionIdx + 1) % _tabCompletions.length;
+      var comp = _tabCompletions[_tabCompletionIdx];
+      var eraseLen = _tabPartial.length;
+      for (var i = 0; i < eraseLen; i++) try { bridge.send_input('\x08'); } catch(e) {}
+      try { bridge.send_input(comp); } catch(e) {}
+      _tabPartial = comp;
+      return;
+    }
+    var parts = line.split(/\s+/);
+    var lastPart = parts[parts.length - 1] || '';
+    if (!lastPart) {
+      try { bridge.send_input('\t'); } catch(e) {}
+      return;
+    }
+    _tabPartial = lastPart;
+    try {
+      if (bridge.complete_path) {
+        bridge.complete_path(lastPart, function(result) {
+          if (result && result.candidates && result.candidates.length > 0) {
+            _tabCompletions = result.candidates.map(function(c) { return c.completion || c.text; });
+            _tabCompletionIdx = 0;
+            var comp = _tabCompletions[0];
+            var eraseLen = _tabPartial.length;
+            for (var i = 0; i < eraseLen; i++) try { bridge.send_input('\x08'); } catch(e) {}
+            try { bridge.send_input(comp); } catch(e) {}
+            _tabPartial = comp;
+            if (_tabCompletions.length > 1) {
+              term.write('\r\n\x1b[33m[补全] ' + _tabCompletions.join('  ') + '\x1b[0m\r\n');
+            }
+          } else {
+            try { bridge.send_input('\t'); } catch(e) {}
+          }
+        });
+        return;
+      }
+    } catch(e) {}
+    try { bridge.send_input('\t'); } catch(e) {}
+  }
+
+  // ── 终端内搜索 (Ctrl+F) ──
+  var searchBar = document.getElementById('search-bar');
+  var searchInput = document.getElementById('search-input');
+  var searchCount = document.getElementById('search-count');
+  var searchCaseSensitive = false;
+  var _searchLastQuery = '';
+
+  function _doSearch() {
+    var query = searchInput.value;
+    if (!query) { searchCount.textContent = ''; return; }
+    if (searchAddon) {
+      var opts = { decorations: { matchBackground: '#ff6b3544', matchBorder: '#ff6b3588', activeMatchBackground: '#ff6b35aa', activeMatchBorder: '#ff6b35' }, caseSensitive: searchCaseSensitive };
+      searchAddon.findNext(query, opts);
+      _searchLastQuery = query;
+      searchCount.textContent = '●';
+    } else {
+      searchCount.textContent = 'N/A';
+    }
+  }
+
+  function _searchPrev() {
+    if (searchAddon && _searchLastQuery) {
+      searchAddon.findPrevious(_searchLastQuery, { decorations: { matchBackground: '#ff6b3544', matchBorder: '#ff6b3588', activeMatchBackground: '#ff6b35aa', activeMatchBorder: '#ff6b35' }, caseSensitive: searchCaseSensitive });
+    }
+  }
+
+  function _toggleSearch() {
+    if (searchBar.classList.contains('show')) {
+      searchBar.classList.remove('show');
+      searchCount.textContent = '';
+      try { term.focus(); } catch(e) {}
+    } else {
+      searchBar.classList.add('show');
+      searchInput.value = '';
+      searchInput.focus();
+    }
+  }
+
+  searchInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (searchInput.value !== _searchLastQuery) {
+        _doSearch();
+      } else {
+        if (e.shiftKey) _searchPrev(); else _doSearch();
+      }
+    } else if (e.key === 'Escape') {
+      _toggleSearch();
+    }
+  });
+  searchInput.addEventListener('input', function() { _doSearch(); });
+  document.getElementById('search-next').addEventListener('click', function() { _doSearch(); });
+  document.getElementById('search-prev').addEventListener('click', function() { _searchPrev(); });
+  document.getElementById('search-close').addEventListener('click', function() { _toggleSearch(); });
+  document.getElementById('search-case').addEventListener('click', function() {
+    searchCaseSensitive = !searchCaseSensitive;
+    this.style.color = searchCaseSensitive ? '#ff6b35' : '';
+    this.style.borderColor = searchCaseSensitive ? '#ff6b35' : '';
+    _doSearch();
+  });
+
+  // ── [358章] 全局重连函数，供 Python 侧主动触发 ──
+  window._reconnectChannel = function(newName) {
+    if (newName) window._pyBridgeName = newName;
+    window._chanRetry = 0;
+    window._termInputReady = false;
+    window._termInputBound = false;
+    connectChannel();
+  };
+
+  // ── 启动连接 ── [358章] 直接调用 connectChannel（内部已有退避重试）
+  connectChannel();
+
+  window.addEventListener('resize', function() { loopFit(); });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,276 @@
+# 技术知识库
+# ===========
+# 本文件提供项目相关的技术知识，帮助AI助手理解系统架构、API用法、最佳实践
+
+## 核心类库API
+
+### AgentOrchestrator（Agent统筹协调器）
+
+**构造函数**:
+```python
+AgentOrchestrator(
+    project_id: str,
+    project_name: str,
+    session_continuity: SessionContinuity,
+    project_log: ProjectLog,
+    multi_instance_manager=None,
+    dispatch_callback=None
+)
+```
+**注意**: 不接受storage_dir参数
+
+**主要方法**:
+- `register_agent(agent_id, role, name)` - 注册agent
+- `add_task(task_id, title, description, required_role=None, assigned_agent=None, dependencies=None, priority=0)` - 添加任务
+- `mark_task_completed(task_id, result="")` - 标记任务完成（要求IN_PROGRESS状态）
+- `get_status()` - 获取完整状态（返回agents列表）
+
+**Task数据类字段**:
+- `task_id: str` (必填)
+- `project_id: str` (必填)
+- `title: str` (必填，不是name)
+- `description: str` (必填)
+- `state: TaskState` (默认PENDING)
+- `dependencies: List[str]` (可选)
+
+---
+
+### MultiInstanceManager（多实例管理器）
+
+**构造函数**:
+```python
+MultiInstanceManager(project_path: str = "", parent=None)
+```
+**注意**: 不接受mimo_path参数，项目路径会自动查找mimo.exe
+
+**实例池配置**:
+- 默认5个实例：Director(1) + Workers(4)
+- 默认端口：4097-4101
+- 默认角色：director, build, plan, compose, general
+
+**主要方法**:
+- `dispatch_task(task_desc)` - 派发任务到最空闲的worker
+- `dispatch_batch(task_descs)` - 批量派发任务
+- `mark_worker_done(instance_id, result="")` - 标记worker完成
+- `get_cluster_summary()` - 获取集群摘要
+
+**返回字段**:
+- `total` (不是total_instances)
+- `running`
+- `director`
+- `workers`
+- `active_workers`
+
+---
+
+### SessionContinuity（会话持续性）
+
+**构造函数**:
+```python
+SessionContinuity(storage_dir: str, context_window: int = 32768)
+```
+
+**主要方法**:
+- `start_session(agent_id, project_id, initial_context="")` - 启动新会话
+- `append_message(agent_id, role, content)` - 追加消息
+- `handoff_session(agent_id, summary="")` - 会话移交
+- `get_agent_status(agent_id)` - 获取agent状态
+- `get_all_agents_status()` - 获取所有agent状态
+
+**返回字段**:
+- `total_sessions` (不是session_handoffs)
+- `current_tokens`
+- `safe_threshold`
+- `need_handoff`
+
+**注意**: 属性是`_context_window`（单数），不是`_context_windows`（复数）
+
+---
+
+### ProjectLog（项目日志）
+
+**EventType枚举**:
+```python
+class EventType(Enum):
+    PROJECT_INIT = "project_init"
+    AGENT_ASSIGNED = "agent_assigned"
+    AGENT_COMPLETED = "agent_completed"
+    SESSION_HANDED_OFF = "session_handed_off"
+    TASK_DISPATCHED = "task_dispatched"
+    ERROR = "error"
+    # ...
+```
+
+**主要方法**:
+- `log(event_type, project_id, agent_id=None, ...)` - 记录事件
+- `get_project_events(project_id, event_type=None, ...)` - 获取事件
+
+**注意**: `ProjectEvent.event_type`存储的是字符串（`EventType.value`），不是枚举对象
+
+---
+
+## 常见错误与修复
+
+### 1. AgentOrchestrator构造函数参数错误
+```python
+# 错误
+orch = AgentOrchestrator(project_id="p1", storage_dir="/path")
+
+# 正确
+sc = SessionContinuity(storage_dir="/path/sessions")
+pl = ProjectLog(storage_dir="/path/log")
+orch = AgentOrchestrator(project_id="p1", project_name="项目", session_continuity=sc, project_log=pl)
+```
+
+### 2. Task字段名错误
+```python
+# 错误
+Task(task_id="t1", name="任务")  # 字段名是title
+
+# 正确
+Task(task_id="t1", title="任务", project_id="p1", description="描述")
+```
+
+### 3. mark_task_completed状态错误
+```python
+# 错误：新增任务是PENDING状态，直接调用会失败
+orch.mark_task_completed("task_001")  # 返回False
+
+# 正确：先设置为IN_PROGRESS
+orch._tasks["task_001"].state = TaskState.IN_PROGRESS
+orch.mark_task_completed("task_001")
+```
+
+### 4. ProjectEvent.event_type比较错误
+```python
+# 错误：event_type是字符串，不是枚举
+e.event_type == EventType.ERROR
+
+# 正确
+e.event_type == EventType.ERROR.value  # 或直接用字符串
+```
+
+---
+
+## 最佳实践
+
+### 任务依赖图环检测
+```python
+def _detect_cycle(self, task_id, visited, rec_stack):
+    visited.add(task_id)
+    rec_stack.add(task_id)
+    
+    for dep_id in self._tasks[task_id].dependencies:
+        if dep_id not in visited:
+            if self._detect_cycle(dep_id, visited, rec_stack):
+                return True
+        elif dep_id in rec_stack:
+            return True  # 检测到环
+    
+    rec_stack.remove(task_id)
+    return False
+```
+
+### 会话handoff流程
+```python
+# 1. 检测是否需要handoff
+status = sc.get_agent_status(agent_id)
+if status['need_handoff']:
+    # 2. 执行handoff
+    new_session = sc.handoff_session(agent_id, summary="工作总结")
+    # 3. 新会话自动注入handoff文档
+```
+
+### 事件记录模式
+```python
+# 推荐使用便捷方法
+pl.log_agent_assigned(project_id, agent_id, task_id, task_desc)
+pl.log_agent_completed(project_id, agent_id, task_id, result)
+pl.log_session_handed_off(project_id, agent_id, old_session, new_session)
+
+# 或使用通用方法
+pl.log(EventType.AGENT_ASSIGNED, project_id, agent_id=agent_id, task_id=task_id, title="任务分配")
+```
+
+---
+
+## 性能优化建议
+
+### 1. 减少文件读取
+- 已读取的文件不重复读取
+- 使用limit参数只读取需要的部分
+- 使用Grep搜索特定内容而非读取整个文件
+
+### 2. 并行工具调用
+- 独立的操作使用并行调用
+- 依赖的操作使用顺序调用
+- 不超过5个并行调用
+
+### 3. 内存管理
+- `_output_history`限制500条
+- `output_buffer`限制200条
+- 定期清理持久化存储
+
+---
+
+## 测试验证
+
+### 测试脚本命名规范
+- `test_*.py` - 单元测试
+- `test_hybrid_*.py` - 混合模式测试
+- `test_long_run_*.py` - 长周期测试
+
+### 测试报告命名规范
+- `*_REPORT.json` - JSON格式报告
+- `*_REPORT.md` - Markdown格式报告
+
+### 测试覆盖率目标
+- 核心模块：90%+
+- 工具函数：80%+
+- 集成测试：关键路径覆盖
+
+---
+
+## 项目约束提醒
+
+### Hard Constraints（必须遵守）
+- 必须使用mimocode核心AI服务
+- MIMO Code端口：4097-4101
+- AI助手使用Ollama qwen3.5:4b
+- 知识库注入user-assistant对话对
+- 任务规划列出已完成/未完成
+
+### Engineering Conventions（约定）
+- AgentOrchestrator不接受storage_dir
+- Task字段名是title不是name
+- add_task接受参数不是Task对象
+- mark_task_completed要求IN_PROGRESS
+- event_type存储字符串不是枚举
+
+---
+
+## 常用命令
+
+### 运行测试
+```bash
+python test_hybrid_logic_and_monitoring.py
+python test_hybrid_mode_comprehensive.py
+```
+
+### 检查Python环境
+```bash
+python --version
+python -c "import PyQt5; print(PyQt5.__file__)"
+```
+
+### 安装依赖
+```bash
+pip install PyQt5
+pip install dataclasses
+```
+
+---
+
+**知识库版本**: v1.0
+**更新日期**: 2026-07-19
+**维护者**: AI Assistant

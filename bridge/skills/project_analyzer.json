@@ -1,0 +1,40 @@
+{
+  "name": "project_analyzer",
+  "version": "2.0.0",
+  "description": "项目专项分析 Skill - 一键完成结构扫描、关键文件提取、代码质量评估、改进建议生成",
+  "tools": [
+    {
+      "name": "scan_project",
+      "weight": 1.0,
+      "description": "首先扫描项目结构，了解整体布局"
+    },
+    {
+      "name": "batch_read_files",
+      "weight": 2.0,
+      "description": "批量读取关键文件(README、入口、配置)"
+    },
+    {
+      "name": "code_search",
+      "weight": 1.5,
+      "description": "按关键词搜索核心实现"
+    },
+    {
+      "name": "file_read",
+      "weight": 1.0,
+      "description": "按需深入读取单个文件"
+    }
+  ],
+  "strategy": "efficient",
+  "max_tool_calls": 20,
+  "auto_summarize": true,
+  "stop_conditions": [
+    "结构已清晰",
+    "关键文件已读取",
+    "技术栈已识别",
+    "核心功能已定位"
+  ],
+  "output_format": {
+    "sections": ["overview", "architecture", "quality", "suggestions"],
+    "language": "auto"
+  }
+}

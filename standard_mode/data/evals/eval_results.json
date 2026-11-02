@@ -1,0 +1,174 @@
+[
+  {
+    "case_id": "eval_code_python",
+    "passed": true,
+    "score": 2.0,
+    "duration": 0.03611493110656738,
+    "tools_used": [
+      "execute_code"
+    ],
+    "error": ""
+  },
+  {
+    "case_id": "eval_code_js",
+    "passed": true,
+    "score": 2.0,
+    "duration": 0.1921534538269043,
+    "tools_used": [
+      "execute_code"
+    ],
+    "error": ""
+  },
+  {
+    "case_id": "eval_file_read",
+    "passed": true,
+    "score": 1.0,
+    "duration": 0.0025713443756103516,
+    "tools_used": [
+      "read_file"
+    ],
+    "error": ""
+  },
+  {
+    "case_id": "eval_file_write",
+    "passed": true,
+    "score": 2.0,
+    "duration": 0.002004861831665039,
+    "tools_used": [
+      "write_file"
+    ],
+    "error": ""
+  },
+  {
+    "case_id": "eval_file_edit",
+    "passed": false,
+    "score": 0.0,
+    "duration": 0.0,
+    "tools_used": [],
+    "error": ""
+  },
+  {
+    "case_id": "eval_search_grep",
+    "passed": true,
+    "score": 1.0,
+    "duration": 0.0,
+    "tools_used": [
+      "search_codebase"
+    ],
+    "error": ""
+  },
+  {
+    "case_id": "eval_command_run",
+    "passed": true,
+    "score": 2.0,
+    "duration": 0.022912979125976562,
+    "tools_used": [
+      "run_command"
+    ],
+    "error": ""
+  },
+  {
+    "case_id": "eval_web_research",
+    "passed": false,
+    "score": 0.0,
+    "duration": 0.0,
+    "tools_used": [],
+    "error": ""
+  },
+  {
+    "case_id": "eval_code_review",
+    "passed": false,
+    "score": 0.0,
+    "duration": 0.0,
+    "tools_used": [],
+    "error": ""
+  },
+  {
+    "case_id": "eval_math_solve",
+    "passed": false,
+    "score": 0.0,
+    "duration": 0.0,
+    "tools_used": [],
+    "error": ""
+  },
+  {
+    "case_id": "eval_translate",
+    "passed": false,
+    "score": 0.0,
+    "duration": 0.0,
+    "tools_used": [],
+    "error": ""
+  },
+  {
+    "case_id": "eval_ocr",
+    "passed": false,
+    "score": 0.0,
+    "duration": 0.0,
+    "tools_used": [],
+    "error": ""
+  },
+  {
+    "case_id": "eval_disk_clean",
+    "passed": false,
+    "score": 0.0,
+    "duration": 0.0,
+    "tools_used": [],
+    "error": ""
+  },
+  {
+    "case_id": "eval_batch_rename",
+    "passed": false,
+    "score": 0.0,
+    "duration": 0.0,
+    "tools_used": [],
+    "error": ""
+  },
+  {
+    "case_id": "eval_duplicate_find",
+    "passed": false,
+    "score": 0.0,
+    "duration": 0.0,
+    "tools_used": [],
+    "error": ""
+  },
+  {
+    "case_id": "eval_file_organize",
+    "passed": false,
+    "score": 0.0,
+    "duration": 0.0,
+    "tools_used": [],
+    "error": ""
+  },
+  {
+    "case_id": "eval_system_report",
+    "passed": false,
+    "score": 0.0,
+    "duration": 0.0,
+    "tools_used": [],
+    "error": ""
+  },
+  {
+    "case_id": "eval_clipboard",
+    "passed": false,
+    "score": 0.0,
+    "duration": 0.0,
+    "tools_used": [],
+    "error": ""
+  },
+  {
+    "case_id": "eval_sandbox_code",
+    "passed": false,
+    "score": 0.0,
+    "duration": 0.0,
+    "tools_used": [],
+    "error": ""
+  },
+  {
+    "case_id": "eval_cost_report",
+    "passed": false,
+    "score": 0.0,
+    "duration": 0.0,
+    "tools_used": [],
+    "error": ""
+  }
+]

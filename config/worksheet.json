@@ -1,0 +1,78 @@
+{
+  "tasks": {
+    "2cc5286e": {
+      "id": "2cc5286e",
+      "name": "需求分析",
+      "description": "分析需求文档、提取关键点、识别风险",
+      "status": "pending",
+      "engine": "ollama",
+      "role": "director",
+      "dependencies": [],
+      "created_at": "2026-07-16T10:18:40.401294",
+      "completed_at": null
+    },
+    "1466b1a6": {
+      "id": "1466b1a6",
+      "name": "代码调研",
+      "description": "搜索相关代码、分析依赖、评估可行性",
+      "status": "pending",
+      "engine": "ollama",
+      "role": "director",
+      "dependencies": [],
+      "created_at": "2026-07-16T10:18:40.402303",
+      "completed_at": null
+    },
+    "2058a965": {
+      "id": "2058a965",
+      "name": "方案设计",
+      "description": "设计架构、确定技术栈、编写设计文档",
+      "status": "pending",
+      "engine": "ollama",
+      "role": "director",
+      "dependencies": [],
+      "created_at": "2026-07-16T10:18:40.402303",
+      "completed_at": null
+    },
+    "da0ea06f": {
+      "id": "da0ea06f",
+      "name": "实施变更",
+      "description": "编码、测试、调试",
+      "status": "pending",
+      "engine": "ollama",
+      "role": "director",
+      "dependencies": [],
+      "created_at": "2026-07-16T10:18:40.403810",
+      "completed_at": null
+    },
+    "dad4766a": {
+      "id": "dad4766a",
+      "name": "交付验收",
+      "description": "运行验证脚本、生成报告、用户确认",
+      "status": "pending",
+      "engine": "ollama",
+      "role": "director",
+      "dependencies": [],
+      "created_at": "2026-07-16T10:18:40.404822",
+      "completed_at": null
+    }
+  },
+  "task_order": [
+    "2cc5286e",
+    "1466b1a6",
+    "2058a965",
+    "da0ea06f",
+    "dad4766a"
+  ],
+  "engine": "ollama",
+  "mode": "plan",
+  "role": "director",
+  "updated_at": "2026-07-16T10:18:40.404822",
+  "telemetry": {
+    "enabled": false,
+    "endpoint": "",
+    "sample_rate": 0.1
+  },
+  "ollama_instances": [
+    {"host": "127.0.0.1", "port": 11434, "weight": 1}
+  ]
+}

@@ -1,0 +1,223 @@
+[LemonWork] 已拉起数字银行（:8090，无窗口守护）
+[LemonWork] 数字银行看门狗已启动（10s 探测 / 掉线自愈）
+[skills_registry] 已注册 v0.8.0 新增 2 个 Skill（browser_automation + jupyter_notebook）
+[skills_registry] 已注册 v0.9.0 新增 2 个 Skill（git_skill + package_manager）
+[skills_registry] v1.0.0 MIEMIE分身 Skill 注册失败: No module named 'code_clone'
+[skills_registry] 已注册 34 个业务技能
+[skills_registry] v3.71 已注册/覆盖 3 个增强办公 Skill
+[ProcessBridge] markdown_utils 导入成功, markdown_to_html=<function markdown_to_html at 0x000002AE4749EDE0>
+[skills_registry] v1.1.0 已注册 11/11 个 Skill
+[skills] 已注册 46/46 个技能
+[skills_registry] core.skills 模块注册完成: 46 项
+[skills_registry] 386B-4 schema 分层: example+23 / skip+12
+[LemonWork] 布局补丁已安装
+[启动 0.00s] Lemon Agent 启动中...
+[启动 0.00s] ✓ QWebEngine 初始化完成 (0.00s)
+[启动 0.06s] 初始化崩溃恢复系统...
+[CrashRecovery] 加载了 0 个恢复点
+[启动 0.07s] ✓ 崩溃恢复系统就绪 (0.07s)
+[CrashRecovery] 全局异常处理器已安装
+[CrashRecovery] 线程异常处理器已安装
+[启动 0.07s] ✓ 延迟加载模块注册完成 (0.00s)
+[启动 0.07s] ✓ 用户设置加载完成 (0.00s)
+[Main] QWebEngine 远程调试: http://localhost:9222
+[启动 0.60s] ✓ QApplication 初始化完成 (0.52s)
+[Main] QApplication 初始化耗时: 0.60s
+[CodeLock] 密码验证通过，标准模式文件已解锁
+[CodeLock] 作者授权通过（口令已校验），标准模式冻结已解除。保护文件=10
+[启动 0.60s] 初始化引擎管理器...
+[skills_registry] 已注册 v0.8.0 新增 2 个 Skill（browser_automation + jupyter_notebook）
+[skills_registry] 已注册 v0.9.0 新增 2 个 Skill（git_skill + package_manager）
+[skills_registry] v1.0.0 MIEMIE分身 Skill 注册失败: No module named 'code_clone'
+[skills_registry] 已注册 34 个业务技能
+[skills_registry] v3.71 已注册/覆盖 3 个增强办公 Skill
+[skills_registry] v1.1.0 已注册 11/11 个 Skill
+[skills] 已注册 46/46 个技能
+[skills_registry] core.skills 模块注册完成: 46 项
+[skills_registry] 386B-4 schema 分层: example+23 / skip+12
+[Main] 用户设置 — 引擎: auto, 温度: 0.7, 主题: cyber, 语言: zh
+[启动 2.41s] ✓ 引擎管理器初始化完成 (1.81s)
+[Main] 卡顿黑匣子已启动 (data/perf/)
+[启动 2.41s] 创建主窗口...
+[InteractionLogger] 初始化完成，日志目录: D:\YH-lemon\LemonWork\data\interaction_logs
+[ProcessBridge] 错误: <span style='color:Lemon.ACCENT_RED;'>❌ MIMO Code 可执行文件不存在: C:\Users\Legion\AppData\Local\Programs\@mimo-ai\mimocode-windows-x64\bin\mimo.exe</span>
+[ServeBridge] STDIO 模式启动失败，回退到直接模式
+[ProcessBridge] 错误: <span style='color:Lemon.ACCENT_RED;'>❌ MIMO Code 可执行文件不存在: C:\Users\Legion\AppData\Local\Programs\@mimo-ai\mimocode-windows-x64\bin\mimo.exe</span>
+[ServeBridge] Process Bridge 已启动 (主要通信)
+[ServeBridge] ACP Bridge 已就绪 (备用通信)
+[ServeBridge] PTY Bridge 已就绪 (第三备选)
+[Router] 通道切换: process → process
+[ServeBridge] IntelligentBridgeRouter 已就绪
+[CrashRecovery] 全局异常处理器已安装
+[CrashRecovery] 线程异常处理器已安装
+[MIMOWindow._init_ui] 开始创建UI...
+[MIMOWindow._init_ui] 创建原始核心组件...
+[MainWindow] 终端 Tab 已添加，index=1
+[BottomPanel] KiwiPanel 初始化失败（不影响其他 Tab）: No module named 'vizboard'
+[MIMOWindow._init_ui] 创建原始界面...
+[SessionWorkspace] create_session: sid=sess_1, 调用 panel_factory...
+[Trace] v2 统一时间线已启用（旧路径已门控；设 LEMON_TRACE_V2=0 回退）
+[MimoPanel] kiwi 图表通道未接线（跳过）：No module named 'vizboard'
+[MIMO Panel] OllamaBridge 已初始化（qwen3.5:4b）
+[SessionWorkspace] Tab 已添加: idx=0, name=会话 1, panel=<ui.mimo_panel.MIMOCodePanel object at 0x000002AE7A306D50>
+[TerminalServer] HTTP=52532 WebSocket=52533 Token=31b68358...
+[SimpleTerminal] session_id=panel_001
+[SimpleTerminal] HTTP=52532 WS=52533 sid=panel_001
+[_create_original_ui] 四栏布局创建成功（左侧栏+文件树+编辑器+AI面板）
+[MIMOWindow._init_ui] 创建混合模式页面...
+[_create_hybrid_page] 开始创建（Web版）...
+[HybridPanel] WebEngine 持久化存储: C:/Users/Legion/AppData/Local/pythonw\hybrid_web_profile
+[HybridPanel] 已拉起 混合模式桥(port 7790) pid=29448
+[HybridPanel] 已拉起 指挥官服务(port 7791) pid=45804
+[HybridModeWebPanel] Bridge初始化失败: No module named 'hybrid_mode'
+[HybridModeWebPanel][诊断] repo_root=D:\YH-lemon\LemonWork 存在=True
+[HybridModeWebPanel][诊断] hybrid_mode/ 存在=False core/ 存在=False
+[HybridModeWebPanel][诊断] sys.path 前6项=['D:\\YH-lemon\\LemonWork\\standard_mode\\ui', 'D:\\YH-lemon\\LemonWork\\standard_mode\\ui', 'D:\\YH-lemon\\LemonWork\\standard_mode\\core\\..\\..\\standard_mode\\core\\skills', 'D:\\YH-lemon\\LemonWork', 'D:\\YH-lemon\\LemonWork\\standard_mode', 'D:\\YH-lemon\\LemonWork\\standard_mode\\ui']
+[HybridModeWebPanel] 加载HTML: D:\YH-lemon\LemonWork\hybrid_mode_wireframe.html
+[_create_hybrid_page] HybridModeWebPanel 创建成功
+[_create_hybrid_page] 创建完成
+[MIMOWindow._init_ui] 创建状态栏...
+[LemonGaze] 陪伴层挂载完成 (instance=1, enabled=False)
+[MIMOWindow._init_ui] 设置快捷键...
+[MIMOWindow._init_ui] UI创建完成
+[MIMOWindow.__init__] _init_ui 完成，开始连接信号...
+[403T-4] output_view signal connect skipped: 'MIMOWindow' object has no attribute 'output_view'
+[_connect_signals] EngineManager 未注入，延迟重试...
+[_connect_signals] Whitebox RunRegistry 信号已绑定
+[MIMOWindow.__init__] _connect_signals 完成，开始加载项目...
+[MIMOWindow.__init__] _load_project 完成
+[MIMOWindow.__init__] 注册工作区...
+[MIMOWindow.__init__] 工作区注册完成
+[MIMOWindow.__init__] 调用 self.show()...
+[MIMOWindow.__init__] self.show() 完成，isVisible=True
+[MIMOWindow.__init__] 启动 serve_bridge...
+[MIMOWindow.__init__] serve_bridge.start() 完成
+[ConnectionMonitor] 已初始化，3s后启动进度条连接
+[MIMOWindow.__init__] 调用 _show_mimo_monitor()...
+[OpsSkills] 已注册 20 个运维工具到 SkillsRegistry
+[BrowserToolSource] 已注册 5 个 Browser 工具
+[EngineRuntime] 已注册工具源: browser -> BrowserToolSource
+[NotebookShell] 已注册 2 个 Notebook 工具
+[EngineRuntime] 已注册工具源: notebook -> NotebookShell
+[MIMOWindow.__init__] 初始化完成！
+[启动 8.90s] ✓ 主窗口创建完成 (6.49s)
+[MIMO Panel] 引擎管理器已连接
+[skills_registry] 已注册 v0.8.0 新增 2 个 Skill（browser_automation + jupyter_notebook）
+[skills_registry] 已注册 v0.9.0 新增 2 个 Skill（git_skill + package_manager）
+[skills_registry] v1.0.0 MIEMIE分身 Skill 注册失败: No module named 'code_clone'
+[skills_registry] 已注册 34 个业务技能
+[skills_registry] v3.71 已注册/覆盖 3 个增强办公 Skill
+[skills_registry] v1.1.0 已注册 11/11 个 Skill
+[skills] 已注册 46/46 个技能
+[skills_registry] core.skills 模块注册完成: 46 项
+[skills_registry] 386B-4 schema 分层: example+23 / skip+12
+[DeepSeek-NORM] messages=[{"role": "user", "content": "ping", "type": "text"}]
+[MIMO Panel] AI Banking 技能包: {'success': True, 'skills': 16, 'actions': 16, 'error': ''}
+[MIMO Panel] 网页预览: {'success': True, 'skills': ['web_preview'], 'error': ''}
+[MIMO Panel] 图表/表单卡: {'success': True, 'skills': ['ui_chart_card', 'ui_form_card'], 'error': ''}
+[MIMO Panel] 远程数字银行: {'success': True, 'skills': ['remote_bank_health', 'remote_bank_accounts', 'remote_bank_query_balance', 'remote_bank_transfer', 'remote_bank_reverse', 'remote_bank_transactions', 'remote_bank_audit', 'remote_bank_risk_events', 'remote_bank_reconcile', 'remote_bank_compound', 'remote_bank_products', 'remote_bank_subscriptions', 'remote_bank_menu', 'remote_loan_list', 'remote_loan_apply', 'remote_loan_repay', 'remote_fund_list', 'remote_fund_buy', 'remote_stock_list', 'remote_stock_kline', 'remote_stock_trade', 'remote_bank_holdings', 'remote_bank_events', 'remote_bank_deposits', 'remote_bank_social', 'remote_find_account', 'remote_transfer_schedule', 'remote_transfer_aa', 'remote_bill_analysis', 'remote_wealth_advisor', 'remote_card_manage', 'remote_subscription_cancel', 'remote_mall', 'remote_bank_console', 'remote_bank_navigate'], 'error': '', 'actions_overridden': ['bank.query_balance', 'bank.transfer', 'bank.reverse', 'bank.reconcile'], 'bank_url': 'http://127.0.0.1:8090'}
+[MIMO Panel] ActionCard 技能已注册（ui_action_card / list_actions）
+[Main] 引擎管理器已注入到 MIMO Panel
+[HybridModeWebPanel] 引擎管理器已延迟注入（unified_chat 正路生效）
+[Main] 引擎管理器已注入到混合模式面板
+[Main] 第362章 user_built 挂载: 0 项
+[Main] 窗口创建耗时: 8.91s
+[MemoryMonitor] 内存监控已启动（30秒检查/5分钟GC）
+[Main] 初始内存: RSS=351.3MB, VMS=856.0MB
+[CrashRecovery] 看门狗已启动（超时=30.0s）
+[启动 8.93s] ⚠ 启动完成 — 超过 3s 目标
+[364章][asset_check] 资产校验通过
+[_connect_signals] EngineManager 信号已连接到底部终端
+[MIMOWindow.__init__] 强制初始布局已刷新
+[MIMOWindow.__init__] 强制初始布局已刷新
+[LemonWork] 启动窗口: 1400x1060 (比例 1.32)
+[LemonWork] 已隐藏顶栏模式切换器 NATIVE/HOST
+[LemonWork] 已隐藏面板布局切换键
+[LemonWork] 品牌/布局注入已挂载 view=4
+[LemonWork] 聚焦模式已应用：保留右侧会话区 + 底部终端
+[LemonWork] 启动窗口: 1400x1060 (比例 1.32)
+[LemonWork] 已隐藏顶栏模式切换器 NATIVE/HOST
+[LemonWork] 已隐藏面板布局切换键
+[LemonWork] 品牌/布局注入已挂载 view=4
+[LemonWork] 聚焦模式已应用：保留右侧会话区 + 底部终端
+[Main] 定时调度器已启动 (D:\YH-lemon\LemonWork\data\scheduler)
+[MIMO Panel] ★ 兜底: _js_ready = True (3秒超时), 队列大小: 2
+[MIMO Panel] HTML 开始加载
+[MIMO Panel] HTML 加载进度: 0%
+[LemonGaze] page -> None
+[LemonWork] 品牌注入结果: {'composer': 'css', 'hidden': [], 'renamed': 0}
+[LemonWork] 品牌注入结果: {'composer': 'css', 'hidden': [], 'renamed': 0}
+[LemonWork] 品牌注入结果: {'composer': 'css', 'hidden': [], 'renamed': 0}
+[LemonWork] 品牌注入结果: {'composer': 'css', 'hidden': [], 'renamed': 0}
+[LemonWork] 品牌注入结果: {'composer': 'css', 'hidden': [], 'renamed': 0}
+[LemonWork] 品牌注入结果: {'composer': 'css', 'hidden': [], 'renamed': 0}
+[LemonWork] 品牌注入结果: {'composer': 'css', 'hidden': [], 'renamed': 0}
+[LemonWork] 品牌注入结果: {'composer': 'css', 'hidden': [], 'renamed': 0}
+[MIMO Panel] HTML 加载进度: 41%
+[MIMO Panel] HTML 加载进度: 63%
+[LemonWork] 品牌注入结果: {'composer': 'css', 'hidden': ['模式'], 'renamed': 0}
+[SimpleTerminal] terminal_xterm.html 加载完成, xterm.js 将通过 WebSocket 连接
+[TerminalServer] 新 WebSocket 连接
+[TerminalServer] 收到未认证消息: {"cmd":"auth","token":"31b68358c47109fdd5395ee068c78a82"}...
+[TerminalServer] WebSocket 认证成功
+[LemonWork] 品牌注入结果: {'composer': 'css', 'hidden': [], 'renamed': 0}
+[LemonWork] 品牌注入结果: {'composer': 'css', 'hidden': [], 'renamed': 0}
+[LemonWork] 品牌注入结果: {'composer': 'css', 'hidden': [], 'renamed': 0}
+[MIMO Panel] HTML 加载进度: 69%
+[Engine] _handle_engine called: action=worktree, args=[['get_merge_mode']], _engine_manager=<shared.engine_manager.EngineManager object at 0x000002AE687940E0>
+[MIMO Panel] HTML 加载进度: 100%
+[MIMO Panel] HTML 加载完成信号: ok=True
+[MIMO Panel] _js_ready = True (立即设置), 队列大小: 0
+[MIMO Panel] HTML 页面加载完成，Console Message Bridge 已就绪
+[LemonWork] 品牌注入结果: {'composer': 'css', 'hero': 'shown', 'hidden': ['技能', '模式'], 'renamed': 0}
+[LemonWork] 品牌注入结果: {'composer': 'css', 'hero': 'shown', 'hidden': ['模式'], 'renamed': 0}
+[Engine] ✓ 收到完整消息: 'Pong! 🏓
+
+What can I help you with today?...'
+[C281A] 跨引擎运行时后台预热完成: ['ollama', 'mimocode', 'deepseek']
+[Engine] _handle_engine called: action=get_current_model, args=[[]], _engine_manager=<shared.engine_manager.EngineManager object at 0x000002AE687940E0>
+[Engine] _handle_engine called: action=status, args=[[]], _engine_manager=<shared.engine_manager.EngineManager object at 0x000002AE687940E0>
+[Engine] _handle_engine called: action=models, args=['mimocode'], _engine_manager=<shared.engine_manager.EngineManager object at 0x000002AE687940E0>
+[Engine] _handle_engine called: action=status, args=[[]], _engine_manager=<shared.engine_manager.EngineManager object at 0x000002AE687940E0>
+[Engine] _handle_engine called: action=models, args=['ollama'], _engine_manager=<shared.engine_manager.EngineManager object at 0x000002AE687940E0>
+[Engine] _handle_engine called: action=status, args=[[]], _engine_manager=<shared.engine_manager.EngineManager object at 0x000002AE687940E0>
+[Engine] _handle_engine called: action=models, args=['deepseek'], _engine_manager=<shared.engine_manager.EngineManager object at 0x000002AE687940E0>
+[Settings] 加载设置: theme=cyber
+[LemonGaze] page -> {"api":"function","w":1400,"h":800,"op":"0","z":"6","disp":"block","cls":"right-panel-mode"}
+[PluginMarket] 已加载 42 个插件（本地目录）
+[PYBRIDGE] handle_check_all_ai_status: callback_id=8
+[Skills] 列出 102 个技能
+[PYBRIDGE] => JS回调: callback_id=7, success=True, online=N/A
+[PYBRIDGE] => JS回调: callback_id=6, success=True, online=N/A
+[ConnectionMonitor] 进度条连接已启动
+[桥接监控] JS 桥接状态: bridge=ok, _callPython=function, _pybridgeCallback=function
+[MIMO Panel] _js_ready = True, 队列大小: 0
+[PYBRIDGE] checkAllAIStatus 完成: ollama=True, mimo=False, 2274ms
+[PYBRIDGE] => JS回调: callback_id=8, success=True, online=N/A
+[LazyLoader] 已加载: plugins
+[LazyLoader] 已加载: debugger
+[HybridPanel] [WARN] 混合模式桥(7790) 10s 内未探活——相关按钮将如实报错
+[HybridPanel] [WARN] 指挥官服务(7791) 10s 内未探活——相关按钮将如实报错
+[LazyLoader] 已加载: workspace
+[LazyLoader] 已加载: settings
+[Main] 更新检查器已初始化，当前版本: 1.0.0
+[Updater] 自定义服务器检查失败: <urlopen error [Errno 11001] getaddrinfo failed>, 降级到本地
+[Main] 更新检查完成: 已是最新
+[LazyLoader] 已加载: git
+[LazyLoader] 已加载: skill_router
+[LazyLoader] 已加载: skill_market
+[LazyLoader] 已加载: business_skills
+[PYBRIDGE] handle_check_all_ai_status: callback_id=9
+[PYBRIDGE] checkAllAIStatus 完成: ollama=True, mimo=False, 2172ms
+[PYBRIDGE] => JS回调: callback_id=9, success=True, online=N/A
+[LemonWork] 品牌注入结果: {'composer': 'css', 'hidden': [], 'renamed': 0}
+[LemonWork] 品牌注入结果: {'composer': 'css', 'hidden': [], 'renamed': 0}
+[PYBRIDGE] handle_check_all_ai_status: callback_id=10
+[PYBRIDGE] checkAllAIStatus 完成: ollama=True, mimo=False, 2153ms
+[PYBRIDGE] => JS回调: callback_id=10, success=True, online=N/A
+[Main] 正在清理资源...
+[Main] 用户设置已保存
+[Main] 崩溃标记已清除（正常退出）
+[Main] 资源清理完成
+[TerminalServer] WebSocket 断开 closeCode=1000 reason='' error='Unknown error'
+[LemonGaze] page -> None

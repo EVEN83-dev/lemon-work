@@ -1,0 +1,12 @@
+{
+  "math_solver": [
+    {"version": "1.0.0", "date": "2024-01-01", "changes": "初始版本"},
+    {"version": "1.1.0", "date": "2024-06-15", "changes": "新增 SymPy 符号计算"}
+  ],
+  "code_reviewer": [
+    {"version": "1.0.0", "date": "2024-03-01", "changes": "初始版本"}
+  ],
+  "grep_search": [
+    {"version": "1.0.0", "date": "2024-01-01", "changes": "初始版本"}
+  ]
+}
