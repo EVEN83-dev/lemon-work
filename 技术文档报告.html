@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lemon Work 技术文档 · 系统架构 / 核心算法 / 安全设计</title>
+<style>
+  :root{
+    --navy:#1F4E79; --navy2:#2E6DA4; --lemon:#F5C518; --lemon-d:#D9A400;
+    --ink:#26303B; --mut:#6B7684; --bg:#FAFBFD; --card:#FFFFFF; --line:#E3E8EF;
+    --ok:#2E9E6B; --warn:#C00000; --u:#4A90D9; --b:#7B68C8; --e:#2E9E6B; --s:#E8A200; --k:#D96A4A;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:"Microsoft YaHei","PingFang SC",sans-serif;background:var(--bg);color:var(--ink);line-height:1.75;font-size:15px;}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 28px 80px;}
+  header{background:linear-gradient(135deg,#16324F 0%,#1F4E79 55%,#2E6DA4 100%);color:#fff;padding:52px 28px 44px;margin-bottom:36px;}
+  header .in{max-width:1080px;margin:0 auto;}
+  .brand{display:inline-flex;align-items:center;gap:10px;background:rgba(245,197,24,.14);border:1px solid rgba(245,197,24,.5);color:var(--lemon);font-weight:700;font-size:13px;padding:5px 14px;border-radius:999px;letter-spacing:1px;}
+  h1{font-size:38px;margin:18px 0 8px;letter-spacing:1px;}
+  .sub{color:#CFE2F3;font-size:16px;}
+  .metabar{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px;}
+  .chip{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.22);border-radius:8px;padding:6px 14px;font-size:13px;color:#EAF2FA;}
+  .chip a{color:var(--lemon);text-decoration:none;font-weight:700;}
+  h2{font-size:24px;color:var(--navy);margin:46px 0 6px;padding-left:14px;border-left:5px solid var(--lemon);}
+  h2 .en{font-size:13px;color:var(--mut);font-weight:400;margin-left:10px;letter-spacing:.5px;}
+  .lede{color:var(--mut);margin:8px 0 18px;font-size:14px;}
+  h3{font-size:17px;color:var(--navy2);margin:26px 0 10px;}
+  p{margin:10px 0;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:24px 26px;margin:16px 0;box-shadow:0 2px 10px rgba(31,78,121,.05);}
+  .figcap{font-size:12.5px;color:var(--mut);text-align:center;margin-top:8px;}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.5px;background:#fff;}
+  th{background:var(--navy);color:#fff;padding:9px 12px;text-align:left;font-weight:600;white-space:nowrap;}
+  td{border:1px solid var(--line);padding:8px 12px;vertical-align:top;}
+  tr:nth-child(even) td{background:#F6F9FC;}
+  code,.mono{font-family:Consolas,Menlo,monospace;font-size:12.8px;background:#EEF3F8;border:1px solid #DCE6F0;border-radius:5px;padding:1px 6px;color:#1F4E79;}
+  .pill{display:inline-block;border-radius:999px;padding:1px 10px;font-size:12px;font-weight:700;}
+  .pill.g{background:#E4F5EC;color:var(--ok);} .pill.r{background:#FBE7E7;color:var(--warn);}
+  .pill.b{background:#E7F0FB;color:var(--u);} .pill.y{background:#FBF3D9;color:#9C7A00;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  .note{background:#FFF9E8;border:1px solid #F0DFA8;border-left:4px solid var(--lemon);border-radius:10px;padding:12px 16px;font-size:13.5px;margin:14px 0;}
+  .step{display:flex;gap:12px;margin:12px 0;align-items:flex-start;}
+  .step .n{flex:0 0 26px;height:26px;border-radius:50%;background:var(--navy);color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:13px;margin-top:2px;}
+  footer{margin-top:60px;padding-top:22px;border-top:1px solid var(--line);color:var(--mut);font-size:13px;text-align:center;}
+  footer a{color:var(--navy2);}
+  svg{display:block;max-width:100%;height:auto;margin:0 auto;}
+  @media print{ header{padding:30px 20px;} .card{box-shadow:none;} }
+</style>
+</head>
+<body>
+
+<header><div class="in">
+  <div class="brand">🍋 LEMON WORK · 2026 深圳国际金融科技大赛</div>
+  <h1>技术文档</h1>
+  <div class="sub">系统架构图 · 核心算法说明 · 安全设计文档</div>
+  <div class="metabar">
+    <div class="chip">版本 <b>v1.0.0</b> · 2026-11-02</div>
+    <div class="chip">代码仓库 <a href="https://github.com/EVEN83-dev/lemon-work">github.com/EVEN83-dev/lemon-work</a></div>
+    <div class="chip">形态 桌面绿色免安装包（内置 Python 运行时）</div>
+    <div class="chip">配套材料 《安全自评报告》（单独提交）</div>
+  </div>
+</div></header>
+
+<div class="wrap">
+
+<!-- ============ 一、系统架构 ============ -->
+<h2>一、系统架构图 <span class="en">SYSTEM ARCHITECTURE</span></h2>
+<p class="lede">Lemon Work 采用「本地优先、事件驱动、全链白盒」的五层架构。用户输入与 Agent 产出全部经过统一事件流（Trace）渲染，数字银行沙箱通过 UI 状态总线与 Agent 双向联动。</p>
+
+<div class="card">
+<svg viewBox="0 0 980 620" xmlns="http://www.w3.org/2000/svg" font-family="Microsoft YaHei,sans-serif">
+  <defs>
+    <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="#8A99AB"/>
+    </marker>
+    <marker id="arB" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="#4A90D9"/>
+    </marker>
+  </defs>
+
+  <!-- L1 UI -->
+  <rect x="30" y="18" width="920" height="96" rx="14" fill="#EAF2FB" stroke="#4A90D9" stroke-width="1.6"/>
+  <text x="52" y="48" font-size="16" font-weight="700" fill="#1F4E79">L1 表现层 · QtWebEngine 白盒界面</text>
+  <text x="52" y="70" font-size="12" fill="#5B6B7C">TraceRenderer（IIFE 零侵入注入）· 过程头 / 思考链节点 / 任务语义拆解 / 过程时间线 / 工具聚合 / 用量卡</text>
+  <rect x="700" y="32" width="112" height="34" rx="8" fill="#fff" stroke="#4A90D9"/><text x="756" y="54" font-size="12" text-anchor="middle" fill="#1F4E79">输入框 / 队列</text>
+  <rect x="826" y="32" width="112" height="34" rx="8" fill="#fff" stroke="#4A90D9"/><text x="882" y="54" font-size="12" text-anchor="middle" fill="#1F4E79">模型中心 UI</text>
+
+  <line x1="490" y1="114" x2="490" y2="146" stroke="#8A99AB" stroke-width="1.6" marker-end="url(#ar)"/>
+  <text x="502" y="136" font-size="11.5" fill="#5B6B7C">用户任务 ↓ · Trace 事件 ↑（run_start/thinking/round/tool_start/tool_end/text_delta/final…）</text>
+
+  <!-- L2 bridge -->
+  <rect x="30" y="150" width="920" height="88" rx="14" fill="#F1EEFA" stroke="#7B68C8" stroke-width="1.6"/>
+  <text x="52" y="180" font-size="16" font-weight="700" fill="#4A3E8F">L2 桥接层 · PyBridge / 事件总线</text>
+  <text x="52" y="202" font-size="12" fill="#5B6B7C">_callPython 方法分派 · agent_iteration 信号 · 轮内工具累积 · narrative 播报 · 队列暂停/恢复/重生成 · runJavaScript 注入</text>
+  <rect x="700" y="164" width="112" height="34" rx="8" fill="#fff" stroke="#7B68C8"/><text x="756" y="186" font-size="12" text-anchor="middle" fill="#4A3E8F">Trace 事件流</text>
+  <rect x="826" y="164" width="112" height="34" rx="8" fill="#fff" stroke="#7B68C8"/><text x="882" y="186" font-size="12" text-anchor="middle" fill="#4A3E8F">UI 状态总线</text>
+
+  <line x1="490" y1="238" x2="490" y2="270" stroke="#8A99AB" stroke-width="1.6" marker-end="url(#ar)"/>
+
+  <!-- L3 engine -->
+  <rect x="30" y="274" width="920" height="110" rx="14" fill="#E9F7F0" stroke="#2E9E6B" stroke-width="1.6"/>
+  <text x="52" y="304" font-size="16" font-weight="700" fill="#1E6B48">L3 引擎层 · EngineManager + Agent 循环</text>
+  <text x="52" y="326" font-size="12" fill="#5B6B7C">多引擎健康监控（自动切换）· 任务分类器（simple / moderate / complex 轮数预算）· ReAct 式思考-行动-观察循环 · 系统提示词（结构化输出规范）</text>
+  <rect x="700" y="288" width="112" height="34" rx="8" fill="#fff" stroke="#2E9E6B"/><text x="756" y="310" font-size="12" text-anchor="middle" fill="#1E6B48">DeepSeek</text>
+  <rect x="826" y="288" width="112" height="34" rx="8" fill="#fff" stroke="#2E9E6B"/><text x="882" y="310" font-size="12" text-anchor="middle" fill="#1E6B48">Ollama 本地</text>
+  <rect x="762" y="334" width="176" height="34" rx="8" fill="#fff" stroke="#2E9E6B"/><text x="850" y="356" font-size="12" text-anchor="middle" fill="#1E6B48">自定义 OpenAI 兼容引擎</text>
+
+  <line x1="490" y1="384" x2="490" y2="416" stroke="#8A99AB" stroke-width="1.6" marker-end="url(#ar)"/>
+
+  <!-- L4 skills -->
+  <rect x="30" y="420" width="920" height="88" rx="14" fill="#FdF4DC" stroke="#E8A200" stroke-width="1.6"/>
+  <text x="52" y="450" font-size="16" font-weight="700" fill="#8A6700">L4 技能层 · SkillRegistry（46 项技能）</text>
+  <text x="52" y="472" font-size="12" fill="#5B6B7C">SkillDef 强类型 JSON Schema 校验 · 分级授权（L0 只读 → L3 外部网络）· 银行技能 / 远程银行技能 / 办公技能 / 浏览器自动化</text>
+  <rect x="700" y="434" width="112" height="34" rx="8" fill="#fff" stroke="#E8A200"/><text x="756" y="456" font-size="12" text-anchor="middle" fill="#8A6700">银行技能族</text>
+  <rect x="826" y="434" width="112" height="34" rx="8" fill="#fff" stroke="#E8A200"/><text x="882" y="456" font-size="12" text-anchor="middle" fill="#8A6700">办公技能族</text>
+
+  <line x1="490" y1="508" x2="490" y2="540" stroke="#8A99AB" stroke-width="1.6" marker-end="url(#ar)"/>
+
+  <!-- L5 sandbox -->
+  <rect x="30" y="544" width="920" height="62" rx="14" fill="#FBEDE8" stroke="#D96A4A" stroke-width="1.6"/>
+  <text x="52" y="570" font-size="15" font-weight="700" fill="#9C4527">L5 数字银行沙箱 · 127.0.0.1:8090（纯虚拟资金 · 风控引擎 · UI 状态总线 :8091）</text>
+  <text x="52" y="592" font-size="12" fill="#7A5243">转账 / 账单 / 理财 / 卡片 / 订阅代扣 / 商城下单 六大业务域 · 风控四规则（单笔限额 · 日累计 · 高频保护 · 黑名单）· 页面跟随联动</text>
+
+  <!-- side: deploy -->
+  <rect x="30" y="18" width="0" height="0" fill="none"/>
+</svg>
+<div class="figcap">图 1 · Lemon Work 五层系统架构 —— 每一层均可独立审计，Agent 全部行为经 Trace 事件流白盒呈现</div>
+</div>
+
+<h3>1.1 关键设计决策</h3>
+<table>
+  <tr><th style="width:190px">决策</th><th>说明</th><th style="width:230px">收益</th></tr>
+  <tr><td><b>零侵入注入</b></td><td>界面为 HTML/CSS/JS，由 Python 侧以 <code>runJavaScript</code> + QTimer 注入渲染器，不改 WebEngine 内核</td><td>升级不影响宿主；渲染层可独立测试</td></tr>
+  <tr><td><b>统一事件契约</b></td><td>Agent 全部行为收敛为 13 类 Trace 事件（见 2.3），前端只认事件不认引擎</td><td>换引擎零改动；白盒完整可回放</td></tr>
+  <tr><td><b>多引擎热调度</b></td><td>HealthMonitor 周期探测 DeepSeek / Ollama / 自定义引擎，主引擎失联自动降级切换</td><td>断网可用（Ollama 本地兜底）</td></tr>
+  <tr><td><b>沙箱隔离</b></td><td>数字银行为独立进程独立端口，仅绑定 127.0.0.1 回环，虚拟资金无真实支付通道</td><td>Agent 可放手操作，零真实资金风险</td></tr>
+</table>
+
+<!-- ============ 二、核心算法 ============ -->
+<h2>二、核心算法说明 <span class="en">CORE ALGORITHMS</span></h2>
+<p class="lede">Agent 内核为「预算约束下的 ReAct 循环」：任务先经分类器定级获得轮数预算，循环中每一步工具调用都经 JSON Schema 强校验，全过程以事件流对外广播。</p>
+
+<div class="card">
+<svg viewBox="0 0 980 470" xmlns="http://www.w3.org/2000/svg" font-family="Microsoft YaHei,sans-serif">
+  <defs>
+    <marker id="a2" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="#8A99AB"/>
+    </marker>
+  </defs>
+  <!-- input -->
+  <rect x="20" y="30" width="150" height="52" rx="10" fill="#1F4E79"/>
+  <text x="95" y="52" font-size="13" fill="#fff" text-anchor="middle" font-weight="700">用户任务输入</text>
+  <text x="95" y="70" font-size="10.5" fill="#BFD7EC" text-anchor="middle">自然语言</text>
+
+  <line x1="170" y1="56" x2="212" y2="56" stroke="#8A99AB" stroke-width="1.6" marker-end="url(#a2)"/>
+
+  <!-- classifier -->
+  <rect x="216" y="18" width="200" height="78" rx="10" fill="#fff" stroke="#7B68C8" stroke-width="1.5"/>
+  <text x="316" y="40" font-size="13" font-weight="700" fill="#4A3E8F" text-anchor="middle">任务分类器</text>
+  <text x="316" y="60" font-size="10.5" fill="#5B6B7C" text-anchor="middle">关键词 + 语义特征加权</text>
+  <text x="316" y="78" font-size="10.5" fill="#5B6B7C" text-anchor="middle">输出等级 → 轮数预算</text>
+
+  <line x1="416" y1="56" x2="458" y2="56" stroke="#8A99AB" stroke-width="1.6" marker-end="url(#a2)"/>
+  <!-- budget -->
+  <rect x="462" y="18" width="200" height="78" rx="10" fill="#fff" stroke="#7B68C8" stroke-width="1.5"/>
+  <text x="562" y="40" font-size="13" font-weight="700" fill="#4A3E8F" text-anchor="middle">轮数预算分配</text>
+  <text x="562" y="60" font-size="10.5" fill="#5B6B7C" text-anchor="middle">simple ≤ 6 轮 · moderate ≤ 12</text>
+  <text x="562" y="78" font-size="10.5" fill="#5B6B7C" text-anchor="middle">complex ≤ 20（可扩展）</text>
+
+  <line x1="662" y1="56" x2="704" y2="56" stroke="#8A99AB" stroke-width="1.6" marker-end="url(#a2)"/>
+
+  <!-- loop container -->
+  <rect x="708" y="12" width="252" height="252" rx="12" fill="#E9F7F0" stroke="#2E9E6B" stroke-width="1.6" stroke-dasharray="6 4"/>
+  <text x="834" y="34" font-size="12.5" font-weight="700" fill="#1E6B48" text-anchor="middle">Agent 循环（预算内）</text>
+  <rect x="736" y="48" width="196" height="34" rx="8" fill="#fff" stroke="#2E9E6B"/><text x="834" y="70" font-size="11.5" text-anchor="middle" fill="#1E6B48">① 思考（结构化推理）</text>
+  <line x1="834" y1="82" x2="834" y2="94" stroke="#8A99AB" stroke-width="1.4" marker-end="url(#a2)"/>
+  <rect x="736" y="98" width="196" height="34" rx="8" fill="#fff" stroke="#2E9E6B"/><text x="834" y="120" font-size="11.5" text-anchor="middle" fill="#1E6B48">② 选择技能 + 生成参数</text>
+  <line x1="834" y1="132" x2="834" y2="144" stroke="#8A99AB" stroke-width="1.4" marker-end="url(#a2)"/>
+  <rect x="736" y="148" width="196" height="34" rx="8" fill="#fff" stroke="#E8A200"/><text x="834" y="170" font-size="11.5" text-anchor="middle" fill="#8A6700">③ JSON Schema 强校验</text>
+  <line x1="834" y1="182" x2="834" y2="194" stroke="#8A99AB" stroke-width="1.4" marker-end="url(#a2)"/>
+  <rect x="736" y="198" width="196" height="34" rx="8" fill="#fff" stroke="#2E9E6B"/><text x="834" y="220" font-size="11.5" text-anchor="middle" fill="#1E6B48">④ 执行 → 观察结果</text>
+  <!-- loop back -->
+  <path d="M 736 215 L 722 215 L 722 65 L 736 65" fill="none" stroke="#2E9E6B" stroke-width="1.4" marker-end="url(#a2)"/>
+  <text x="716" y="146" font-size="10" fill="#1E6B48" text-anchor="middle" transform="rotate(-90 716 146)">未完成 · 续轮</text>
+
+  <!-- final -->
+  <line x1="834" y1="264" x2="834" y2="296" stroke="#8A99AB" stroke-width="1.6" marker-end="url(#a2)"/>
+  <rect x="708" y="300" width="252" height="52" rx="10" fill="#1F4E79"/>
+  <text x="834" y="322" font-size="13" fill="#fff" text-anchor="middle" font-weight="700">⑤ 收口：结构化结论</text>
+  <text x="834" y="341" font-size="10.5" fill="#BFD7EC" text-anchor="middle">markdown 表格 / 分节 · 永不源码裸奔</text>
+
+  <!-- whitelist branch -->
+  <rect x="20" y="130" width="380" height="150" rx="12" fill="#FdF4DC" stroke="#E8A200" stroke-width="1.5"/>
+  <text x="210" y="156" font-size="13" font-weight="700" fill="#8A6700" text-anchor="middle">语义任务拆解算法（任务列表）</text>
+  <text x="210" y="180" font-size="11" fill="#5B6B7C" text-anchor="middle">连续同名工具调用 → 聚合为一个语义步骤</text>
+  <text x="210" y="200" font-size="11" fill="#5B6B7C" text-anchor="middle">步骤随执行实时翻转状态（进行中/完成/失败）</text>
+  <text x="210" y="220" font-size="11" fill="#5B6B7C" text-anchor="middle">完成即触发银行页面跟随导航（_BANK_VIEW_MAP）</text>
+  <text x="210" y="248" font-size="11" fill="#8A6700" text-anchor="middle">不是执行步骤的复读，而是任务的语义重组</text>
+
+  <!-- trace -->
+  <rect x="20" y="310" width="380" height="132" rx="12" fill="#EAF2FB" stroke="#4A90D9" stroke-width="1.5"/>
+  <text x="210" y="336" font-size="13" font-weight="700" fill="#1F4E79" text-anchor="middle">全链白盒：13 类 Trace 事件</text>
+  <text x="210" y="360" font-size="11" fill="#5B6B7C" text-anchor="middle">run_start · thinking · round · status · text_delta</text>
+  <text x="210" y="380" font-size="11" fill="#5B6B7C" text-anchor="middle">tool_start · tool_end · narrative · full_result</text>
+  <text x="210" y="400" font-size="11" fill="#5B6B7C" text-anchor="middle">final · meta · bg_task · run_end</text>
+  <text x="210" y="426" font-size="11" fill="#1F4E79" text-anchor="middle">前端唯一入口 window.TraceRenderer.consume(ev)</text>
+
+  <!-- follow bus -->
+  <rect x="708" y="380" width="252" height="62" rx="10" fill="#FBEDE8" stroke="#D96A4A" stroke-width="1.5"/>
+  <text x="834" y="404" font-size="12.5" font-weight="700" fill="#9C4527" text-anchor="middle">页面跟随联动</text>
+  <text x="834" y="426" font-size="10.5" fill="#7A5243" text-anchor="middle">业务完成 → /api/ui/state → 银行页自动导航</text>
+</svg>
+<div class="figcap">图 2 · Agent 核心算法：预算约束 ReAct 循环 + 语义任务拆解 + 全链事件流 + 页面跟随</div>
+</div>
+
+<h3>2.1 任务分类器（轮数预算）</h3>
+<p>输入任务先按关键词与语义特征加权打分，划入三档，获得递归工具调用轮数上限。金融多步动词（推荐/办理/联动/切换/汇总等）强制进入 moderate 以上，防止多步业务被低预算截断。</p>
+<table>
+  <tr><th>等级</th><th>判定特征</th><th>轮数预算</th><th>典型任务</th></tr>
+  <tr><td><span class="pill b">simple</span></td><td>单一查询意图、无多步动词</td><td>≤ 6</td><td>查余额、查产品列表</td></tr>
+  <tr><td><span class="pill y">moderate</span></td><td>多步金融动词 / 对比 / 推荐</td><td>≤ 12</td><td>理财推荐+申购、账单分析</td></tr>
+  <tr><td><span class="pill r">complex</span></td><td>跨场景联动、生成类综合任务</td><td>≤ 20</td><td>订花下单+页面联动展示</td></tr>
+</table>
+
+<h3>2.2 多引擎调度</h3>
+<p>EngineManager 维护引擎注册表，HealthMonitor 周期探测各引擎 <code>/health</code>。主引擎（DeepSeek）失联时自动降级到可用引擎并在界面提示；用户亦可在「模型中心」手动指定，或添加自定义 OpenAI 兼容端点（表单含连接测试、本地模型探测器只显示可连通项）。</p>
+
+<h3>2.3 白盒事件契约（节选）</h3>
+<table>
+  <tr><th style="width:150px">事件</th><th>语义</th><th style="width:250px">渲染表现</th></tr>
+  <tr><td><code>run_start / run_end</code></td><td>一次任务运行的开 / 收</td><td>过程头状态灯 live→done、统计收口</td></tr>
+  <tr><td><code>thinking</code></td><td>思考增量文本</td><td>思考链分节点（段落切分、独立折叠、流式仅重绘活跃节点）</td></tr>
+  <tr><td><code>round</code></td><td>工具轮开始（含 max_rounds）</td><td>轮容器 + 预算徽标</td></tr>
+  <tr><td><code>tool_start / tool_end</code></td><td>技能调用开始 / 结果</td><td>工具条目，同名 ≥3 自动聚合</td></tr>
+  <tr><td><code>narrative</code></td><td>轮内聚合播报</td><td>过程时间线（"已查收款人 → 转账成功 → 预约定时转账"）</td></tr>
+  <tr><td><code>final</code></td><td>结构化结论</td><td>markdown 双保险渲染，超长自动折叠</td></tr>
+  <tr><td><code>meta</code></td><td>用量统计</td><td>usage-card：token / 轮数 / 工具数 / 耗时 / 上下文</td></tr>
+</table>
+
+<!-- ============ 三、安全设计 ============ -->
+<h2>三、安全设计文档 <span class="en">SECURITY DESIGN</span></h2>
+<p class="lede">安全设计遵循「最小暴露面 + 分级授权 + 全程审计」三原则。详细的风险清单与整改计划见单独提交的《安全自评报告》，本节给出设计视角的摘要。</p>
+
+<div class="card">
+<svg viewBox="0 0 980 340" xmlns="http://www.w3.org/2000/svg" font-family="Microsoft YaHei,sans-serif">
+  <defs>
+    <linearGradient id="tier" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#2E9E6B"/><stop offset="1" stop-color="#4A90D9"/>
+    </linearGradient>
+  </defs>
+  <!-- L0 -->
+  <rect x="20" y="20" width="940" height="66" rx="10" fill="#E9F7F0" stroke="#2E9E6B" stroke-width="1.4"/>
+  <rect x="20" y="20" width="86" height="66" rx="10" fill="#2E9E6B"/>
+  <text x="63" y="48" font-size="15" font-weight="700" fill="#fff" text-anchor="middle">L0</text>
+  <text x="63" y="68" font-size="10" fill="#D8F0E4" text-anchor="middle">只读</text>
+  <text x="126" y="45" font-size="13.5" font-weight="700" fill="#1E6B48">纯查询 · 不改变任何状态</text>
+  <text x="126" y="68" font-size="11.5" fill="#5B6B7C">余额 / 流水 / 产品列表 / 卡列表 / 行情　——　Agent 自主调用，全部进入 Trace 留痕</text>
+
+  <!-- L1 -->
+  <rect x="20" y="98" width="940" height="66" rx="10" fill="#EAF2FB" stroke="#4A90D9" stroke-width="1.4"/>
+  <rect x="20" y="98" width="86" height="66" rx="10" fill="#4A90D9"/>
+  <text x="63" y="126" font-size="15" font-weight="700" fill="#fff" text-anchor="middle">L1</text>
+  <text x="63" y="146" font-size="10" fill="#D8E8F8" text-anchor="middle">沙箱资产</text>
+  <text x="126" y="123" font-size="13.5" font-weight="700" fill="#1F4E79">虚拟账务变动（转账 / 申购 / 取消订阅）</text>
+  <text x="126" y="146" font-size="11.5" fill="#5B6B7C">须用户明确对话指令触发 · 受沙箱风控四规则约束 · 动作全程过程时间线白盒展示</text>
+
+  <!-- L2 -->
+  <rect x="20" y="176" width="940" height="66" rx="10" fill="#FdF4DC" stroke="#E8A200" stroke-width="1.4"/>
+  <rect x="20" y="176" width="86" height="66" rx="10" fill="#E8A200"/>
+  <text x="63" y="204" font-size="15" font-weight="700" fill="#fff" text-anchor="middle">L2</text>
+  <text x="63" y="224" font-size="10" fill="#FBEFD0" text-anchor="middle">本地环境</text>
+  <text x="126" y="201" font-size="13.5" font-weight="700" fill="#8A6700">文件读写 / 终端命令 / Git / 包管理</text>
+  <text x="126" y="224" font-size="11.5" fill="#5B6B7C">需用户会话内确认 · 命令带超时与输出捕获 · 生产部署建议白名单关闭非必需技能</text>
+
+  <!-- L3 -->
+  <rect x="20" y="254" width="940" height="66" rx="10" fill="#FBEDE8" stroke="#D96A4A" stroke-width="1.4"/>
+  <rect x="20" y="254" width="86" height="66" rx="10" fill="#D96A4A"/>
+  <text x="63" y="282" font-size="15" font-weight="700" fill="#fff" text-anchor="middle">L3</text>
+  <text x="63" y="302" font-size="10" fill="#F8DfD6" text-anchor="middle">外部网络</text>
+  <text x="126" y="279" font-size="13.5" font-weight="700" fill="#9C4527">出站 LLM API / 网页抓取</text>
+  <text x="126" y="302" font-size="11.5" fill="#5B6B7C">仅出站 HTTPS，用户自配密钥 · 连接测试由用户显式触发 · 系统无任何入站监听端口</text>
+</svg>
+<div class="figcap">图 3 · 技能权限四级分级（L0→L3 控制强度与审计强度递增）</div>
+</div>
+
+<h3>3.1 四类安全边界</h3>
+<div class="grid2">
+  <div class="card"><h3 style="margin-top:0">🌐 网络边界</h3><p style="font-size:13.5px">银行沙箱与 UI 总线仅绑定 <code>127.0.0.1</code> 回环；系统对外仅有 LLM API 的出站 HTTPS；无遥测、无统计上报。</p></div>
+  <div class="card"><h3 style="margin-top:0">💰 资金边界</h3><p style="font-size:13.5px">数字银行沙箱为纯虚拟账务，不接入任何真实支付 / 清算通道；风控引擎内置单笔限额、日累计、高频保护、收款方黑名单四规则。</p></div>
+  <div class="card"><h3 style="margin-top:0">📁 数据边界</h3><p style="font-size:13.5px">对话、轨迹、配置全部存本机用户目录，可随时删除；发布包强制剔除 .git / 日志 / 用户数据并做复制完整性校验。</p></div>
+  <div class="card"><h3 style="margin-top:0">🔑 密钥边界</h3><p style="font-size:13.5px">API Key 仅存本机配置；源码仓库与发布包均不含任何密钥（发布前专项审计确认）；风险与加密改进计划见《安全自评报告》R-01。</p></div>
+</div>
+
+<h3>3.2 已知风险摘要</h3>
+<table>
+  <tr><th>编号</th><th>风险项</th><th>等级</th><th>缓解措施（现状）</th></tr>
+  <tr><td>R-01</td><td>API Key 本地明文存储</td><td><span class="pill r">中</span></td><td>仅存本机、不入仓库不入发布包；计划 DPAPI 加密</td></tr>
+  <tr><td>R-02</td><td>提示词注入</td><td><span class="pill r">中</span></td><td>Schema 强校验拒绝非法参数；L1 隔离在虚拟沙箱；L2 需确认</td></tr>
+  <tr><td>R-03</td><td>本地服务无鉴权</td><td><span class="pill y">低-中</span></td><td>仅绑定回环；计划本地令牌握手</td></tr>
+  <tr><td>R-04</td><td>命令执行类技能滥用</td><td><span class="pill r">中</span></td><td>需确认 + 超时；生产建议白名单关闭；计划审批流</td></tr>
+  <tr><td>R-05~08</td><td>日志数据 / 风控简化 / 供应链 / XSS</td><td><span class="pill g">低</span></td><td>虚拟数据无害 / 教学定位声明 / 版本锁定 / 双保险转义</td></tr>
+</table>
+<div class="note">完整《安全自评报告》（权限分级说明与已知风险清单）已作为大赛第 04 项材料单独提交。</div>
+
+<!-- ============ 四、部署说明 ============ -->
+<h2>四、部署说明 <span class="en">DEPLOYMENT</span></h2>
+<p class="lede">提供「绿色免安装包」与「源码部署」两种方式，仓库与发布物均已开放。</p>
+
+<div class="grid2">
+  <div class="card">
+    <h3 style="margin-top:0">方式 A · 绿色包（推荐评委体验）</h3>
+    <div class="step"><div class="n">1</div><div>从 Release 下载 <code>LemonWork-v1.0.0-win64-portable.zip</code>（371 MB，含内置 Python 运行时）</div></div>
+    <div class="step"><div class="n">2</div><div>解压任意目录，双击 <code>启动LemonWork.bat</code>（银行沙箱随主程序自动拉起）</div></div>
+    <div class="step"><div class="n">3</div><div>设置页填入 DeepSeek API Key（或选择 Ollama 本地引擎离线使用），即可对话体验六大场景</div></div>
+    <div class="note">六大场景一键演示：<b>演示六大场景.bat</b> 自动依序执行 S1~S6，每场景停留 12 秒，便于评审观摩。</div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">方式 B · 源码部署</h3>
+    <div class="step"><div class="n">1</div><div><code>git clone https://github.com/EVEN83-dev/lemon-work.git</code></div></div>
+    <div class="step"><div class="n">2</div><div><code>pip install -r requirements.txt</code>（核心：PyQt5 / PyQtWebEngine / requests / markdown）</div></div>
+    <div class="step"><div class="n">3</div><div><code>python yh_main.py</code> 启动；数字银行沙箱亦可独立运行：<code>python server.py</code></div></div>
+    <div class="step"><div class="n">4</div><div>测试回归：<code>scripts\</code> 下四层测试脚本（白盒 / 巡航 / 端到端 / 六场景合规）</div></div>
+  </div>
+</div>
+
+<!-- ============ 五、测试证据 ============ -->
+<h2>五、测试用例与证据 <span class="en">TEST EVIDENCE</span></h2>
+<p class="lede">全部测试为脚本驱动真实 GUI / 真实 DeepSeek 执行的自动化断言，非人工勾选。测试脚本随仓库开源（<code>scripts/</code> 目录）。</p>
+<table>
+  <tr><th>测试层</th><th>脚本</th><th>覆盖</th><th>结果</th></tr>
+  <tr><td>白盒化回归</td><td><code>gui_whitebox_test.py</code></td><td>过程头 / 思考节点 / 任务拆解 / 输出规范 / 渲染窗口</td><td><span class="pill g">30/30 通过</span></td></tr>
+  <tr><td>巡航稳定性</td><td><code>gui_patrol_test.py</code></td><td>连续真实任务 + 3s tick 停滞检测（防中断）</td><td><span class="pill g">11/11 通过</span></td></tr>
+  <tr><td>端到端</td><td><code>gui_bank_e2e_test.py</code></td><td>转账 / 理财 / 卡片三场景 + 银行页面联动</td><td><span class="pill g">12/12 通过</span></td></tr>
+  <tr><td>六场景合规</td><td><code>gui_competition_test.py</code></td><td>赛题 S1~S6 各 4 项断言（工具执行/命中/表达/白盒）</td><td><span class="pill g">26 项断言通过</span></td></tr>
+  <tr><td>契约审计</td><td><code>audit_broken_links.py</code></td><td>前后端调用配对 / 事件契约 / 假按钮扫描</td><td><span class="pill g">AUDIT PASS</span></td></tr>
+  <tr><td>发布物审计</td><td><code>make_release.py</code></td><td>junction 守卫 / 完整性校验 / 密钥与隐私检查</td><td><span class="pill g">通过</span></td></tr>
+</table>
+
+<footer>
+  Lemon Work 技术文档 · v1.0.0 · 2026-11-02 ·
+  代码仓库 <a href="https://github.com/EVEN83-dev/lemon-work">https://github.com/EVEN83-dev/lemon-work</a><br>
+  本文档对应大赛报名材料第 01 项「技术文档：系统架构图、核心算法说明、安全设计文档」；安全专题详见单独提交的《安全自评报告》。
+</footer>
+
+</div>
+</body>
+</html>
