@@ -11,6 +11,10 @@
 
 ---
 
+<p align="center">
+  <img src="submission-2026/assets/lemonone-logo.png" width="110" alt="Lemon One logo">
+</p>
+
 # 🍋 Lemon Work · AI 智能工作助手（含数字银行沙箱）
 
 > 桌面级 AI Banking Agent —— 自然语言驱动虚拟银行办理业务、多层次白盒可视化、

@@ -3,6 +3,10 @@
 > **一个人的 AI 公司操作系统**
 > 一句话，让 9 个 AI 员工组成你的公司：策划、调研、开发、评审到交付，全程可视、可审批、可追溯。
 
+<p align="center">
+  <img src="assets/lemonone-logo.png" width="120" alt="Lemon One logo">
+</p>
+
 <p>
   <img alt="Python" src="https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python&logoColor=white">
   <img alt="PyQt5" src="https://img.shields.io/badge/PyQt5-QWebEngine-41CD52?style=flat-square&logo=qt&logoColor=white">
