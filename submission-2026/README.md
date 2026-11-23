@@ -2,6 +2,8 @@
 
 > **一个人的 AI 公司操作系统**
 > 一句话，让 9 个 AI 员工组成你的公司：策划、调研、开发、评审到交付，全程可视、可审批、可追溯。
+>
+> **视频版本说明**：参赛视频是前身 **LemonCode** 的编码能力演示；本页和在线体验展示的是最新 **Lemon One 多 Agent 公司模式**。建议先看 9 工位 / 7 表账本 / 审批门，再回看视频作为标准模式补充。
 
 <p align="center">
   <img src="assets/lemonwork-logo.png" width="120" alt="Lemon One logo">
