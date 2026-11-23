@@ -4,7 +4,7 @@
 > 一句话，让 9 个 AI 员工组成你的公司：策划、调研、开发、评审到交付，全程可视、可审批、可追溯。
 
 <p align="center">
-  <img src="assets/lemonone-logo.png" width="120" alt="Lemon One logo">
+  <img src="assets/lemonwork-logo.png" width="120" alt="Lemon One logo">
 </p>
 
 <p>

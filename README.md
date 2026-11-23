@@ -12,7 +12,7 @@
 ---
 
 <p align="center">
-  <img src="submission-2026/assets/lemonone-logo.png" width="110" alt="Lemon One logo">
+  <img src="submission-2026/assets/lemonwork-logo.png" width="110" alt="Lemon One logo">
 </p>
 
 # 🍋 Lemon Work · AI 智能工作助手（含数字银行沙箱）
