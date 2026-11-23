@@ -185,7 +185,8 @@ python yh_main.py
 - 不填 API Key：使用本地 Ollama（默认 `qwen3.5:4b`）。
 - 使用云端：在「配置」中填入 DeepSeek Key，或添加任意 OpenAI 兼容端点。
 
-> 本参赛包另附 `core-source.zip`（1.44MB / 137 个文件），包含公司模式、桥接、账本、角色系统、媒体技能等核心源码，便于评委离线审阅。
+> 本参赛包另附 `core-source.zip`（1.44MB / 135 个文件），包含公司模式、桥接、账本、角色系统、媒体技能等核心源码，便于评委离线审阅。
+> 完整可运行整包（含虚拟银行、启动脚本、4 张截图、技术文档）：`LemonOne-参赛包-2026.zip`。
 
 ---
 
@@ -227,6 +228,7 @@ submission-2026/
 ├─ PROJECT_OVERVIEW.md      产品与技术总览
 ├─ CHECKLIST.md             提交前人工检查清单
 ├─ core-source.zip          核心源码包（离线审阅）
+├─ LemonOne-参赛包-2026.zip  完整可运行整包（虚拟银行 + 截图 + 文档 + 启动脚本）
 ├─ highlights/              本轮核心改动源码（可直接浏览）
 └─ screenshots/             真实运行截图
 ```
