@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lemon Work · 架构作战图</title>
+<style>
+  :root{
+    --bg:#050608;--pane:#0a0c11;--pane2:#0e1118;--line:rgba(255,255,255,.09);
+    --w:#e8ecf3;--dim:#9aa2b1;--mut:#5f6777;
+    --cyan:#58e0d0;--green:#42e08b;--pink:#ff5c9e;--amber:#ffb347;
+    --violet:#a78bfa;--blue:#5cadff;--red:#ff5d5d;
+    --mono:Consolas,"Cascadia Mono","Microsoft YaHei",monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{min-height:100%;background:var(--bg);color:var(--w);font:12.5px/1.5 var(--mono)}
+  body{padding:18px 22px 40px}
+  a{color:var(--cyan)}
+  .top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+  .brand{display:flex;align-items:center;gap:8px;font-weight:700;letter-spacing:1.2px}
+  .brand i{width:18px;height:18px;border-radius:5px;background:linear-gradient(135deg,var(--amber),#ff7a2f);
+    box-shadow:0 0 10px rgba(255,154,74,.4)}
+  .sub{color:var(--mut);font-size:10.5px}
+  .tabs{display:flex;gap:5px;flex-wrap:wrap;margin:10px 0 14px}
+  .tab{padding:5px 13px;border:1px solid var(--line);border-radius:999px;color:var(--dim);
+    font-size:11px;cursor:pointer;background:rgba(255,255,255,.02)}
+  .tab.on{color:var(--w);border-color:rgba(88,224,208,.45);background:rgba(88,224,208,.08)}
+  .view{display:none}
+  .view.on{display:block}
+  .sec{margin:14px 0 8px;font-size:10px;color:var(--mut);letter-spacing:1.6px;
+    display:flex;align-items:center;gap:8px}
+  .sec:after{content:"";height:1px;flex:1;background:var(--line)}
+  .layer{border:1px solid var(--line);border-radius:10px;background:var(--pane);padding:10px 12px}
+  .layer h3{font-size:10px;color:var(--mut);font-weight:500;letter-spacing:1.4px;margin-bottom:8px}
+  .row{display:grid;gap:7px;grid-template-columns:repeat(4,minmax(0,1fr))}
+  .row.c3{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .row.c5{grid-template-columns:repeat(5,minmax(0,1fr))}
+  .box{border:1px solid var(--line);border-radius:8px;background:var(--pane2);padding:8px 10px;min-width:0}
+  .box .n{font-size:11px;font-weight:600;color:var(--w);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .box .d{font-size:9px;color:var(--mut);line-height:1.5;margin-top:2px}
+  .box .tag{display:inline-block;font-size:8px;letter-spacing:.4px;padding:1px 5px;border-radius:3px;
+    border:1px solid var(--line);color:var(--dim);margin-top:4px;margin-right:3px}
+  .box.miss{border:1px dashed rgba(255,93,93,.55);background:rgba(255,93,93,.04)}
+  .box.miss .n{color:#ff9a9a}
+  .box.ok{border-color:rgba(66,224,139,.35)}
+  .box.warn{border-color:rgba(255,179,71,.35);background:rgba(255,179,71,.03)}
+  .box.new{border-color:rgba(88,224,208,.4);background:rgba(88,224,208,.04)}
+  .arrowdown{text-align:center;color:#3d4554;font-size:12px;line-height:18px}
+  .callout{margin-top:10px;border-left:2px solid var(--red);background:rgba(255,93,93,.05);
+    padding:7px 11px;font-size:10px;color:#ffb3b3;line-height:1.7}
+  .callout.warn{border-left-color:var(--amber);background:rgba(255,179,71,.05);color:#ffd39a}
+  .callout.ok{border-left-color:var(--green);background:rgba(66,224,139,.05);color:#a9f5c8}
+  .flow{display:flex;gap:0;align-items:stretch;overflow-x:auto;padding-bottom:6px}
+  .step{flex:0 0 158px;border:1px solid var(--line);border-radius:8px;background:var(--pane2);padding:8px 9px;position:relative;margin-right:20px}
+  .step:after{content:"→";position:absolute;right:-17px;top:50%;transform:translateY(-50%);color:#3d4554;font-size:12px}
+  .step:last-child{margin-right:0}
+  .step:last-child:after{display:none}
+  .step .idx{font-size:8px;color:var(--cyan);letter-spacing:1px}
+  .step .n{font-size:10.5px;font-weight:600;margin-top:1px}
+  .step .d{font-size:8.5px;color:var(--mut);line-height:1.55;margin-top:3px}
+  .step .f{font-size:8px;color:#4d5564;margin-top:4px;word-break:break-all}
+  .step.miss{border-style:dashed;border-color:rgba(255,93,93,.55)}
+  table{width:100%;border-collapse:collapse;font-size:10px}
+  th,td{text-align:left;padding:5px 7px;border-bottom:1px solid rgba(255,255,255,.05);vertical-align:top}
+  th{color:var(--mut);font-weight:500;letter-spacing:.6px;font-size:9px}
+  td.mono{font-variant-numeric:tabular-nums;color:var(--dim)}
+  .pill{display:inline-block;font-size:8.5px;padding:1px 6px;border-radius:999px;white-space:nowrap}
+  .pill.done{color:var(--green);background:rgba(66,224,139,.10);border:1px solid rgba(66,224,139,.3)}
+  .pill.part{color:var(--amber);background:rgba(255,179,71,.10);border:1px solid rgba(255,179,71,.3)}
+  .pill.todo{color:var(--mut);background:rgba(255,255,255,.04);border:1px solid var(--line)}
+  .pill.block{color:#ff9a9a;background:rgba(255,93,93,.08);border:1px solid rgba(255,93,93,.3)}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:9px;color:var(--mut);margin:8px 0 0}
+  .legend i{display:inline-block;width:7px;height:7px;border-radius:2px;margin-right:4px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  @media(max-width:1100px){.row,.row.c5{grid-template-columns:repeat(2,minmax(0,1fr))}.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="top">
+  <div class="brand"><i></i>LEMON WORK <span class="sub">架构作战图 · 现状 / 目标 / 数据流 / 集群 1</span></div>
+  <span class="sub" style="margin-left:auto">基于 D:\lemon work\LemonWork 扫描 · 2026-11-21</span>
+</div>
+
+<div class="tabs">
+  <button class="tab on" data-v="now">① 现状架构</button>
+  <button class="tab" data-v="target">② 目标架构</button>
+  <button class="tab" data-v="crawlflow">③ 爬虫数据流</button>
+  <button class="tab" data-v="companyflow">④ 公司数据流</button>
+  <button class="tab" data-v="cluster">⑤ 集群 1 执行情况</button>
+</div>
+
+<!-- ═══════════ 现状 ═══════════ -->
+<section class="view on" id="v-now">
+  <div class="sec">前端层 · 用户看到的</div>
+  <div class="layer">
+    <div class="row">
+      <div class="box"><div class="n">聊天与任务卡</div><div class="d">mimo_app.js · lw_taskcard.js</div><span class="tag">消息流</span><span class="tag">团队页 3s</span></div>
+      <div class="box"><div class="n">爬虫舞台</div><div class="d">crawl_board.html · lw_crawl_stage_card.js</div><span class="tag">iframe 卡</span><span class="tag">停靠 Dock</span></div>
+      <div class="box warn"><div class="n">混合模式公司页</div><div class="d">hybrid_mode_wireframe.html 687KB</div><span class="tag">9 员工静态</span><span class="tag">无后端</span></div>
+      <div class="box ok"><div class="n">独立团队大屏</div><div class="d">team_board.html · team_board_window.py</div><span class="tag">真实数据</span><span class="tag">无主入口</span></div>
+    </div>
+  </div>
+  <div class="arrowdown">↓</div>
+  <div class="sec">桥接层 · 谁在传数据</div>
+  <div class="layer">
+    <div class="row">
+      <div class="box"><div class="n">mimo_panel 控制台桥</div><div class="d">__PYBRIDGE__ → runJavaScript</div><span class="tag">JS↔Python</span></div>
+      <div class="box"><div class="n">stage_server</div><div class="d">127.0.0.1:8791 · /api/board · SSE</div><span class="tag">爬虫卡</span><span class="tag">只读</span></div>
+      <div class="box"><div class="n">bridge</div><div class="d">127.0.0.1:8765 · 七端点</div><span class="tag">不随主程序启动</span></div>
+      <div class="box miss"><div class="n">HybridBridge ❌</div><div class="d">hybrid_mode/core/ 整个包不存在</div><span class="tag">公司页断点</span></div>
+    </div>
+  </div>
+  <div class="arrowdown">↓</div>
+  <div class="sec">核心层 · 真正干活的</div>
+  <div class="layer">
+    <div class="row">
+      <div class="box ok"><div class="n">EngineManager</div><div class="d">shared/engine_manager.py · 52 技能 / 40 工具</div><span class="tag">QThread</span><span class="tag">工具超时</span></div>
+      <div class="box ok"><div class="n">SubAgentOrchestrator</div><div class="d">standard_mode/core/sub_agent_orchestrator.py</div><span class="tag">4 并发</span><span class="tag">团队账本</span></div>
+      <div class="box ok"><div class="n">role_system</div><div class="d">10 角色 · 工具白名单 · token 预算</div><span class="tag">闸门在执行层</span></div>
+      <div class="box ok"><div class="n">CrawlEngine</div><div class="d">shared/crawler/engine.py · 2 workers</div><span class="tag">暂停/恢复</span><span class="tag">watchdog</span></div>
+    </div>
+    <div class="callout warn">
+      设计分叉：<b>两套 Agent 运行时</b>（shared/engine_manager 与 bridge/agent_loop）、<b>三套编排</b>
+      （agent_orchestrator / orchestration_engine / sub_agent_orchestrator）、<b>两份 business_skills</b>；
+      同一个 bug 要修两遍，这是维护成本的主要来源。
+    </div>
+  </div>
+  <div class="arrowdown">↓</div>
+  <div class="sec">数据层</div>
+  <div class="layer">
+    <div class="row">
+      <div class="box ok"><div class="n">data/crawl.db</div><div class="d">87MB · 278 会话 · 7857 页</div><span class="tag">WAL</span></div>
+      <div class="box miss"><div class="n">data/company.db ❌</div><div class="d">run / agent / task / event / output 五表缺失</div><span class="tag">无公司运行态</span></div>
+      <div class="box ok"><div class="n">data/sessions</div><div class="d">会话 JSONL · 轨迹 / 计划</div></div>
+      <div class="box ok"><div class="n">config / outputs</div><div class="d">模型配置 · 产物目录</div></div>
+    </div>
+  </div>
+  <div class="callout">
+    现状一句话：<b>爬虫有真引擎、公司有真编排、前端有真页面，但公司页的桥断了、统计聚合没做、对话滚动没锁。</b>
+    所以现在“看起来都能点”，实际公司页的数据是静态的。
+  </div>
+</section>
+
+<!-- ═══════════ 目标 ═══════════ -->
+<section class="view" id="v-target">
+  <div class="sec">前端层 · 固定框架</div>
+  <div class="layer">
+    <div class="row">
+      <div class="box new"><div class="n">聊天 + 滚动锁</div><div class="d">mimo_app.js + LW_FOLLOW_LOCK</div><span class="tag">舞台卡存在即暂停跟随</span></div>
+      <div class="box new"><div class="n">爬虫舞台</div><div class="d">lw_crawl_stage.js/css + lw_crawl_stats.js</div><span class="tag">跑步机</span><span class="tag">词级标注</span></div>
+      <div class="box new"><div class="n">公司看板</div><div class="d">company_board.html · 固定 16/8/52/24</div><span class="tag">3×5 工位</span><span class="tag">底栏三块</span></div>
+      <div class="box new"><div class="n">团队大屏</div><div class="d">team_board.html 保留为详情/完成态</div><span class="tag">V3 网状</span></div>
+    </div>
+  </div>
+  <div class="arrowdown">↓</div>
+  <div class="sec">桥接层 · 一条数据链</div>
+  <div class="layer">
+    <div class="row">
+      <div class="box new"><div class="n">/api/stats</div><div class="d">stage_server 新增 · 真实聚合</div><span class="tag">crawl.db</span><span class="tag">1s 缓存</span></div>
+      <div class="box new"><div class="n">/api/company/*</div><div class="d">company_server 8801-8805 · SSE</div><span class="tag">state</span><span class="tag">events</span></div>
+      <div class="box new"><div class="n">HybridBridge ✅</div><div class="d">12 个核心方法 · 真实对象聚合</div><span class="tag">getAgentsInfo</span><span class="tag">assignTask</span></div>
+      <div class="box new"><div class="n">SSE / 3s 轮询</div><div class="d">可见时才轮询 · 断线退避</div><span class="tag">不抢 UI</span></div>
+    </div>
+  </div>
+  <div class="arrowdown">↓</div>
+  <div class="sec">核心层 · 不改引擎，只加聚合</div>
+  <div class="layer">
+    <div class="row">
+      <div class="box ok"><div class="n">shared/crawler/stats.py</div><div class="d">counters / by_domain / hist / timeline / words / edges</div><span class="tag">只读 SQL</span></div>
+      <div class="box ok"><div class="n">shared/company/service.py</div><div class="d">start / stop / assign / pause / resume / state</div><span class="tag">事件落库</span></div>
+      <div class="box ok"><div class="n">EngineManager + Orchestrator</div><div class="d">复用现有 4 并发与白名单</div><span class="tag">不改执行内核</span></div>
+      <div class="box ok"><div class="n">CrawlEngine</div><div class="d">复用现有队列 / 合规 / 去重</div><span class="tag">不改采集</span></div>
+    </div>
+  </div>
+  <div class="arrowdown">↓</div>
+  <div class="sec">数据层</div>
+  <div class="layer">
+    <div class="row">
+      <div class="box ok"><div class="n">data/crawl.db</div><div class="d">现有 6 张表 + 定时 prune</div></div>
+      <div class="box new"><div class="n">data/company.db</div><div class="d">company_run / agent / task / event / output</div></div>
+      <div class="box ok"><div class="n">data/sessions</div><div class="d">会话轨迹</div></div>
+      <div class="box ok"><div class="n">outputs</div><div class="d">截图 / 产物 / 验收</div></div>
+    </div>
+    <div class="callout ok">
+      目标一句话：<b>采集与编排内核不动，只补“聚合层 + 桥 + 固定看板 + 滚动锁”。</b>
+      这样风险最低，也最容易在三窗口并行。
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 爬虫数据流 ═══════════ -->
+<section class="view" id="v-crawlflow">
+  <div class="sec">从 crawl.db 到固定舞台 · 每个数字都有出处</div>
+  <div class="layer">
+    <div class="flow">
+      <div class="step"><div class="idx">01</div><div class="n">任务入队</div><div class="d">crawl_session 状态机<br>start/pause/resume/stop</div><div class="f">crawl_session</div></div>
+      <div class="step"><div class="idx">02</div><div class="n">CrawlEngine</div><div class="d">2 worker · 背压 1000<br>同域 1.5s · 跨域并行</div><div class="f">engine.py</div></div>
+      <div class="step"><div class="idx">03</div><div class="n">抓取</div><div class="d">requests + 条件请求<br>robots / 熔断 / 退避</div><div class="f">fetch.py · browser_policy.py</div></div>
+      <div class="step"><div class="idx">04</div><div class="n">解析</div><div class="d">正文 / 标题 / 链接<br>PDF / 编码处理</div><div class="f">extract.py</div></div>
+      <div class="step"><div class="idx">05</div><div class="n">判定</div><div class="d">KEEP / MAYBE / CUT<br>质量分 / 去重</div><div class="f">judge · board_data</div></div>
+      <div class="step"><div class="idx">06</div><div class="n">落库</div><div class="d">page / content / edge<br>annotation / metric</div><div class="f">store.py</div></div>
+      <div class="step"><div class="idx">07</div><div class="n">聚合</div><div class="d">counters / domain / hist<br>timeline / words / edges</div><div class="f">stats.py（待建）</div></div>
+      <div class="step"><div class="idx">08</div><div class="n">出口</div><div class="d">/api/card + /api/stats<br>SSE 帧 · 600ms 合并</div><div class="f">stage_server</div></div>
+      <div class="step"><div class="idx">09</div><div class="n">舞台</div><div class="d">正文列 / 弧线 / KPI<br>固定框架</div><div class="f">lw_crawl_stage.js</div></div>
+      <div class="step"><div class="idx">10</div><div class="n">稳定</div><div class="d">单驱动 · 滚动锁<br>iframe 幂等</div><div class="f">LW_FOLLOW_LOCK</div></div>
+    </div>
+  </div>
+  <div class="sec">真实字段映射</div>
+  <div class="layer">
+    <table>
+      <tr><th style="width:26%">画面元素</th><th style="width:30%">真实来源</th><th>说明</th></tr>
+      <tr><td>顶部 5 个计数</td><td class="mono">overview</td><td>总页 / 成功 / 失败 / 去重 / 字节</td></tr>
+      <tr><td>流水线五段</td><td class="mono">queue + crawl_page + crawl_annotation</td><td>发现=frontier，抓取=已完成，解析=正文命中，判定=verdict，标注=annotation</td></tr>
+      <tr><td>左侧正文列</td><td class="mono">crawl_page.title / snippet / domain</td><td>蜘蛛经过的是真实抓取行，不是假文案</td></tr>
+      <tr><td>三色高亮</td><td class="mono">crawl_page.verdict</td><td>青=KEEP，绿=MAYBE，品红=CUT</td></tr>
+      <tr><td>右侧分流 KPI</td><td class="mono">board_data.judge</td><td>规则 / 模型 / 人工三路计数</td></tr>
+      <tr><td>底部决策流</td><td class="mono">judge rows + session_id</td><td>时间 / 问题 / p / 去向</td></tr>
+      <tr><td>置信度 / 负载 / 覆盖</td><td class="mono">series · domain_health · annotation</td><td>折线、点阵、覆盖球都从真实表算</td></tr>
+    </table>
+    <div class="callout warn">样张里的数字是演示数据；正式接入只换数据源，布局不动。空库时显示“—”，不造数。</div>
+  </div>
+</section>
+
+<!-- ═══════════ 公司数据流 ═══════════ -->
+<section class="view" id="v-companyflow">
+  <div class="sec">从角色名册到 3×5 工位 · 真人员工模型</div>
+  <div class="layer">
+    <div class="flow">
+      <div class="step"><div class="idx">01</div><div class="n">角色名册</div><div class="d">10 个内置角色<br>能力 / 白名单 / 预算</div><div class="f">role_system.py</div></div>
+      <div class="step"><div class="idx">02</div><div class="n">工位账本</div><div class="d">register / bind / team_board<br>执行记录</div><div class="f">sub_agent_orchestrator.py</div></div>
+      <div class="step"><div class="idx">03</div><div class="n">派发</div><div class="d">orchestrator_dispatch<br>单次上限 8 / 并发 4</div><div class="f">agent_team_skills.py</div></div>
+      <div class="step"><div class="idx">04</div><div class="n">分身</div><div class="d">spawn_subagent<br>白名单 / token / 超时</div><div class="f">engine_manager.py</div></div>
+      <div class="step"><div class="idx">05</div><div class="n">运行态</div><div class="d">run / agent / task<br>event / output</div><div class="f">company/service.py（待建）</div></div>
+      <div class="step miss"><div class="idx">06</div><div class="n">桥 ❌</div><div class="d">HybridBridge 缺失<br>公司页拿不到真实数据</div><div class="f">hybrid_mode/core/</div></div>
+      <div class="step"><div class="idx">07</div><div class="n">接口</div><div class="d">/api/company/state<br>SSE /api/company/events</div><div class="f">company_server（待建）</div></div>
+      <div class="step"><div class="idx">08</div><div class="n">看板</div><div class="d">3×5 工位 · 左 KPI<br>底栏日志/派发/产出</div><div class="f">company_board.html</div></div>
+    </div>
+  </div>
+  <div class="sec">公司页每一块到底在干什么</div>
+  <div class="layer">
+    <div class="grid2">
+      <div class="box"><div class="n">左栏 · 运行面板</div><div class="d">brief（目标）/ sources（数据源）/ constraints（约束）/ budget（预算）/ prior_runs（历史）。回答“公司现在在什么条件下干活”。</div></div>
+      <div class="box"><div class="n">中栏 · 3×5 工位</div><div class="d">每个员工一张卡：状态灯、当前任务、tokens、runs、完成/失败、白名单数。回答“谁在干什么”。</div></div>
+      <div class="box"><div class="n">中间竖条 · 脊柱</div><div class="d">Agent 与任务/文件之间的依赖边，运行时流动，完成后收敛。回答“谁依赖谁”。</div></div>
+      <div class="box"><div class="n">右栏 · 产出</div><div class="d">units / agents / rejected / rules / broken，以及最新产物。回答“这轮产出了什么”。</div></div>
+      <div class="box"><div class="n">底栏 · 三块</div><div class="d">RUN LOG（谁在何时做了什么）/ DISPATCH（每个席位跑到哪）/ OUTPUT（最终产出与模拟权益）。</div></div>
+      <div class="box miss"><div class="n">当前断点</div><div class="d">HybridBridge 不存在 → 公司页所有真实调用返回“Bridge 不支持方法”，只能显示静态 3 个兜底员工。</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 集群 1 ═══════════ -->
+<section class="view" id="v-cluster">
+  <div class="sec">集群 1 · 爬虫舞台：竖向 + 防闪 + 对话定屏</div>
+  <div class="layer" style="margin-bottom:10px">
+    <div class="legend">
+      <span><i style="background:var(--green)"></i>样张已覆盖</span>
+      <span><i style="background:var(--amber)"></i>部分覆盖</span>
+      <span><i style="background:#3d4554"></i>未执行</span>
+      <span><i style="background:var(--red)"></i>阻塞</span>
+    </div>
+    <div class="callout warn" style="margin-top:8px">
+      说明：智谱三窗口尚未回传正式代码执行日志。下表按我本地可见证据盘点：<b>样张层已完成，正式代码层尚未开工</b>。
+    </div>
+  </div>
+  <div class="layer">
+    <table id="clusterTable">
+      <tr><th style="width:5%">#</th><th style="width:42%">任务</th><th style="width:13%">状态</th><th>证据 / 说明</th></tr>
+    </table>
+  </div>
+</section>
+
+<script>
+(function(){
+  'use strict';
+  // tabs
+  document.querySelectorAll('.tab').forEach(function(b){
+    b.addEventListener('click',function(){
+      document.querySelectorAll('.tab').forEach(function(x){x.classList.remove('on')});
+      document.querySelectorAll('.view').forEach(function(x){x.classList.remove('on')});
+      b.classList.add('on');
+      document.getElementById('v-'+b.dataset.v).classList.add('on');
+    });
+  });
+
+  var tasks = [
+    ['1','冻结基线：备份 crawl_board.html / lw_crawl_stage_card.js / mimo_app.js，记录 sha','todo','样张另存，正式文件未动'],
+    ['2','SPIDER_POSE：bodyAng 恒 π/2，移动只改 x/y，不用 atan2 改身体朝向','done','样张已实现，蜘蛛竖向'],
+    ['3','腿角表改相对 bodyAng 对称 ±22/±50/±78/±105°，四对腿，膝恒上外','done','样张用四段腿 + 膝上外'],
+    ['4','anchorPos 增加 laneX=正文列中心，目标 x 夹在 lane±36px','part','样张固定单列，无 lane 切换'],
+    ['5','新增 DIR（+1 下爬 / -1 上爬），到底/到顶切换，上爬反向遍历 targets','todo','样张只有单向向下'],
+    ['6','上爬时 __trimSeam 改底部摘块、顶部续块，缓存不足停在顶','todo','正式页未改'],
+    ['7','单驱动 __driveMode(raf/interval/host) 三选一互斥','part','样张单 RAF；正式页仍有 rAF+33ms+Qt driver'],
+    ['8','Qt 宿主 driver 仅在 rAF 连续 500ms 未推进时启用','todo','crawl_board_window.py 未改'],
+    ['9','__tick 加 16ms 节流 + 重入锁；loop 加 dirty 标记','part','样张 30fps 节流；dirty 未做'],
+    ['10','pageEl.scrollTop 取整；滚动层改 translate3d','done','样张用 translate3d'],
+    ['11','删除 4 处 backdrop-filter 改纯色，发光只留蜘蛛与 hit','done','样张无 backdrop-filter'],
+    ['12','蛛网改静态低 alpha，仅 hit 时重绘一次','done','样张静态两圈网'],
+    ['13','fireHit 扩到词级：标题/域名/质量词级 span，leg 落足才点亮','part','样张是整行级，不是词级'],
+    ['14','三色标注：KEEP 青 / MAYBE 绿 / CUT 品红，右缘 chip，7s 淡出','done','样张已实现'],
+    ['15','每屏 anchors 从 4 提到 8，只取视口内 span，滚出即回收','part','样张 8 条腿，不是 8 个 span 锚点'],
+    ['16','renderCard 幂等更新禁止改 iframe.src，删 &t=Date.now()','todo','正式页未改'],
+    ['17','删除 renderCard 内 area.scrollTop 强制滚动','todo','正式页未改'],
+    ['18','LW_FOLLOW_LOCK：舞台卡挂载即 _autoScroll=false','todo','样张没有聊天层'],
+    ['19','onStreamToken 锁定态不写 scrollTop，只累加未读','todo','正式页未改'],
+    ['20','统一 _autoScroll 与 lw_smooth.following，只留一个控制器','todo','正式页仍是三套'],
+    ['21','卡片高度固定 clamp(420px,58vh,720px)，折叠不销毁 iframe','part','样张固定，正式页未改'],
+    ['22','卡头加“锁定 / 回到最新”按钮','todo','正式页未做'],
+    ['23','会话切换/重渲染按 card_id 复用，禁止重建 iframe','todo','正式页未做'],
+    ['24','verify_crawl_stage_stable.py：FPS / 漂移 / reload / 50 条消息位移','todo','未写'],
+    ['25','输出 outputs/crawl_stage/before_after.png 与 30s 录屏','done','已有样张截图，正式对照未出']
+  ];
+  var map = {done:['已覆盖','done'], part:['部分覆盖','part'], todo:['未执行','todo'], block:['阻塞','block']};
+  var tb = document.getElementById('clusterTable');
+  tasks.forEach(function(t){
+    var tr = document.createElement('tr');
+    var m = map[t[2]] || map.todo;
+    tr.innerHTML = '<td class="mono">'+t[0]+'</td><td>'+t[1]+'</td><td><span class="pill '+m[1]+'">'+m[0]+'</span></td><td style="color:var(--mut)">'+t[3]+'</td>';
+    tb.appendChild(tr);
+  });
+})();
+</script>
+</body>
+</html>

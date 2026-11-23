@@ -153,29 +153,33 @@ Lemon One 是一个 Windows 桌面级 AI 工作台。它不是一个“会聊天
 Windows 桌面客户端（本地运行，无需账号）：
 
 - 代码仓库：https://github.com/EVEN83-dev/lemon-work
-- 参赛目录：https://github.com/EVEN83-dev/lemon-work/tree/main/submission-2026
-- 核心源码包：`submission-2026/core-source.zip`
+- 完整可运行源码（含 DigitalBank、README、requirements、启动脚本）：
+  https://github.com/EVEN83-dev/lemon-work/blob/main/参赛材料/03_源代码与部署材料.zip
+- 最新公司模式核心（本轮改动，供评审对照）：
+  https://github.com/EVEN83-dev/lemon-work/tree/main/submission-2026
 
 体验步骤：
 
-1. 打开仓库，进入 `submission-2026/`。
-2. 下载 `core-source.zip` 并解压。
-3. 安装 Python 3.12，执行 `pip install -r requirements.txt`。
-4. 执行 `python yh_main.py`。
-5. 启动后默认进入标准模式，点顶部「公司」胶囊进入公司模式。
+1. 下载 `03_源代码与部署材料.zip` 并解压。
+2. 安装 Python 3.12，在解压目录执行 `pip install -r requirements.txt`。
+3. 双击 `启动LemonWork.bat`，或执行 `python LemonWork/yh_main.py`。
+4. 启动后默认进入标准模式，点顶部「公司」胶囊进入公司模式。
+5. 点「管理」查看实时计划 / 历史会话 / 公司上下文 / 项目；点「配置」查看 9 名 AI 员工。
 6. 不填 API Key 时使用本地 Ollama；使用云端模型时在「配置」中填入自己的 DeepSeek Key 或 OpenAI 兼容端点。
 
-如需绿色免安装包，可使用随参赛材料提供的 `LemonWork-v4.8.6-lemonD1-win64-portable.zip`（约 564MB，解压双击 `启动LemonWork.bat`）。
+说明：最新公司模式核心改动在 `submission-2026/core-source.zip` 与 `submission-2026/highlights/`，便于评委对照源码；完整可运行基线使用 `03_源代码与部署材料.zip`。
 
 ---
 
 ## 17. 请按作品形态补充对应体验材料
 
-Windows 桌面客户端材料：
+Windows 桌面客户端材料（建议上传）：
 
-- `LemonWork-v4.8.6-lemonD1-win64-portable.zip`（约 564MB，绿色免安装）
-- `core-source.zip`（核心源码，1.44MB / 137 个文件，SHA256 `707b0d8a...f65d34675`）
-- `screenshots/`（4 张真实运行截图）
+- `参赛材料/03_源代码与部署材料.zip`（7.1MB，完整源码 + DigitalBank + 启动脚本）
+- `submission-2026/core-source.zip`（1.44MB / 137 个文件，本轮最新核心源码，SHA256 `707b0d8a...f65d34675`）
+- `submission-2026/screenshots/`（4 张真实运行截图）
+
+说明：564MB 绿色便携包内含本地运行时令牌 `state/company/server_token.json`，需清理后再上传；不要直接上传原包。
 
 **【需你补充：将上述文件上传到报名表单】**
 
@@ -203,13 +207,13 @@ https://github.com/EVEN83-dev/lemon-work
 
 ## 20. 请提供其他与作品相关的材料
 
-- 技术文档报告：`参赛材料/01_技术文档报告.pdf`
-- 答辩材料：`参赛材料/02_答辩材料.pdf`
-- 安全自评报告：`参赛材料/04_安全自评报告.docx`
-- 架构图：`architecture_map.html`
-- 真实运行截图：`submission-2026/screenshots/`
-- 评委体验指南：`submission-2026/JUDGE_GUIDE.md`
-- 演示脚本：`submission-2026/DEMO_SCRIPT.md`
+- 技术文档报告：https://github.com/EVEN83-dev/lemon-work/blob/main/参赛材料/01_技术文档报告.pdf
+- 答辩材料：https://github.com/EVEN83-dev/lemon-work/blob/main/参赛材料/02_答辩材料.pdf
+- 安全自评报告：https://github.com/EVEN83-dev/lemon-work/blob/main/参赛材料/04_安全自评报告.docx
+- 架构图：https://github.com/EVEN83-dev/lemon-work/blob/main/submission-2026/assets/architecture_map.html
+- 真实运行截图：https://github.com/EVEN83-dev/lemon-work/tree/main/submission-2026/screenshots
+- 评委体验指南：https://github.com/EVEN83-dev/lemon-work/blob/main/submission-2026/JUDGE_GUIDE.md
+- 演示脚本：https://github.com/EVEN83-dev/lemon-work/blob/main/submission-2026/DEMO_SCRIPT.md
 
 说明：数字银行为纯本地模拟沙箱，所有账户、资金、行情均为虚构数据，不涉及真实资金与真实金融机构。
 
